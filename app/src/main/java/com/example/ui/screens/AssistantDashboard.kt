@@ -150,7 +150,37 @@ fun AssistantDashboard(
 }
 
 @Composable
+fun rememberNetworkStatus(context: android.content.Context): State<Boolean> {
+    val connectivityManager = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+    val isConnected = remember { mutableStateOf(false) }
+
+    DisposableEffect(connectivityManager) {
+        val networkCallback = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) { isConnected.value = true }
+            override fun onLost(network: android.net.Network) { isConnected.value = false }
+        }
+        val request = android.net.NetworkRequest.Builder().build()
+        try {
+            connectivityManager.registerNetworkCallback(request, networkCallback)
+            val activeNetwork = connectivityManager.activeNetwork
+            val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork)
+            isConnected.value = capabilities?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        } catch (e: Exception) {
+             // Ignore
+        }
+
+        onDispose {
+            try { connectivityManager.unregisterNetworkCallback(networkCallback) } catch (e: Exception) {}
+        }
+    }
+    return isConnected
+}
+
+@Composable
 fun IosStatusBar(batteryLevel: Int) {
+    val context = LocalContext.current
+    val isConnected by rememberNetworkStatus(context)
+    
     // Top system status indicator row representing Apple bar
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     var currentTimeStr by remember { mutableStateOf(timeFormat.format(Date())) }
@@ -175,15 +205,15 @@ fun IosStatusBar(batteryLevel: Int) {
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                text = "KATE.OS",
-                fontSize = 12.sp,
+                text = if (isConnected) "ONLINE" else "OFFLINE",
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = if (isConnected) Color(0xFF00FF66) else Color.Red
             )
             Icon(
-                imageVector = Icons.Default.SignalCellular4Bar,
+                imageVector = if (isConnected) Icons.Default.SignalCellular4Bar else Icons.Default.SignalCellularConnectedNoInternet0Bar,
                 contentDescription = "iOS Network Active",
-                tint = Color.White,
+                tint = if (isConnected) Color.White else Color.Red,
                 modifier = Modifier.size(13.dp)
             )
             Text(
@@ -716,6 +746,8 @@ fun KateVoiceWidget(
     onToggleMute: () -> Unit,
     onStopVoice: () -> Unit
 ) {
+    var isMinimized by remember { mutableStateOf(false) }
+
     // Beautiful widget displaying a dynamic glowing waveform representation
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -725,7 +757,7 @@ fun KateVoiceWidget(
             .fillMaxWidth()
             .padding(vertical = 10.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(minOf(if (isMinimized) 12.dp else 16.dp))) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -747,83 +779,100 @@ fun KateVoiceWidget(
                     )
                 }
 
-                // Volume helper
-                IconButton(
-                    onClick = onToggleMute,
-                    colors = IconButtonDefaults.iconButtonColors(containerColor = Color.White.copy(alpha = 0.12f)),
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isMuted) Icons.Default.VolumeMute else Icons.Default.VolumeUp,
-                        contentDescription = "Mute Voice Trigger",
-                        tint = if (isMuted) Color.Red else Color(0xFF00F0FF),
-                        modifier = Modifier.size(16.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconButton(
+                        onClick = { isMinimized = !isMinimized },
+                        colors = IconButtonDefaults.iconButtonColors(containerColor = Color.White.copy(alpha = 0.12f)),
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isMinimized) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                            contentDescription = "Minimize or Expand",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    // Volume helper
+                    IconButton(
+                        onClick = onToggleMute,
+                        colors = IconButtonDefaults.iconButtonColors(containerColor = Color.White.copy(alpha = 0.12f)),
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isMuted) Icons.Default.VolumeMute else Icons.Default.VolumeUp,
+                            contentDescription = "Mute Voice Trigger",
+                            tint = if (isMuted) Color.Red else Color(0xFF00F0FF),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            if (!isMinimized) {
+                Spacer(modifier = Modifier.height(12.dp))
 
-            // Waveform core canvas
-            KateCustomWaveform(isActive = isSpeaking)
+                // Waveform core canvas
+                KateCustomWaveform(isActive = isSpeaking)
 
-            Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-            // Sliding controllers for speech parameters & high adjustments
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Column(modifier = Modifier.weight(1.0f)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Vocal Pitch (Sweetness)", fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.Bold)
-                        Text("${"%.2f".format(voicePitch)}x", fontSize = 10.sp, color = Color(0xFF00F0FF), fontWeight = FontWeight.Bold)
-                    }
-                    Slider(
-                        value = voicePitch,
-                        onValueChange = onPitchChange,
-                        valueRange = 0.8f..1.8f,
-                        colors = SliderDefaults.colors(
-                            thumbColor = Color(0xFF00F0FF),
-                            activeTrackColor = Color(0xFF00F0FF)
-                        )
-                    )
-                }
-
-                Column(modifier = Modifier.weight(1.0f)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Cadence rate (Warmth)", fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.Bold)
-                        Text("${"%.2f".format(voiceSpeed)}x", fontSize = 10.sp, color = Color(0xFFA855F7), fontWeight = FontWeight.Bold)
-                    }
-                    Slider(
-                        value = voiceSpeed,
-                        onValueChange = onSpeedChange,
-                        valueRange = 0.6f..1.4f,
-                        colors = SliderDefaults.colors(
-                            thumbColor = Color(0xFFA855F7),
-                            activeTrackColor = Color(0xFFA855F7)
-                        )
-                    )
-                }
-            }
-
-            if (isSpeaking) {
-                Button(
-                    onClick = onStopVoice,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.2f), contentColor = Color.White),
-                    border = BorderStroke(1.dp, Color.Red),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(34.dp)
+                // Sliding controllers for speech parameters & high adjustments
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text("Deactivate Active speech stream", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Column(modifier = Modifier.weight(1.0f)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Vocal Pitch (Sweetness)", fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.Bold)
+                            Text("${"%.2f".format(voicePitch)}x", fontSize = 10.sp, color = Color(0xFF00F0FF), fontWeight = FontWeight.Bold)
+                        }
+                        Slider(
+                            value = voicePitch,
+                            onValueChange = onPitchChange,
+                            valueRange = 0.8f..1.8f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFF00F0FF),
+                                activeTrackColor = Color(0xFF00F0FF)
+                            )
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1.0f)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Cadence rate (Warmth)", fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.Bold)
+                            Text("${"%.2f".format(voiceSpeed)}x", fontSize = 10.sp, color = Color(0xFFA855F7), fontWeight = FontWeight.Bold)
+                        }
+                        Slider(
+                            value = voiceSpeed,
+                            onValueChange = onSpeedChange,
+                            valueRange = 0.6f..1.4f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFFA855F7),
+                                activeTrackColor = Color(0xFFA855F7)
+                            )
+                        )
+                    }
+                }
+
+                if (isSpeaking) {
+                    Button(
+                        onClick = onStopVoice,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.2f), contentColor = Color.White),
+                        border = BorderStroke(1.dp, Color.Red),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(34.dp)
+                    ) {
+                        Text("Deactivate Active speech stream", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
