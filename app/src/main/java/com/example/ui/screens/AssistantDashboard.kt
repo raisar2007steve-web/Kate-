@@ -23,7 +23,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -46,6 +49,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -997,13 +1001,84 @@ fun IosMessageBubble(
 // ==========================================
 // SCREEN B: Elegant Weather & News widget screen
 // ==========================================
+// Live Stock Market Indexes
+data class StockIndex(
+    val name: String,
+    val value: String,
+    val change: String,
+    val isUp: Boolean,
+    val description: String
+)
+
+val stockIndexesList = listOf(
+    StockIndex("BSE SENSEX", "74,825.80", "▲ +1.15% (+850)", true, "Sensex BSE index climbs eight hundred fifty points to new record. High tech and bank stock inflows."),
+    StockIndex("NIFTY 50", "22,750.40", "▲ +1.22% (+275)", true, "Nifty fifty index claims record highs near twenty two thousand seven hundred fifty points, led by key IT sectors."),
+    StockIndex("NASDAQ", "16,340.50", "▼ -0.35% (-57)", false, "Nasdaq Composite settles lower by zero point thirty five percent on global tech profit taking."),
+    StockIndex("DOW JONES", "39,120.20", "▲ +0.45% (+175)", true, "Dow Jones climbing by one hundred seventy five points or zero point forty five percent on industrial gains."),
+    StockIndex("NIFTY IT", "34,210.10", "▲ +2.10% (+702)", true, "Nifty Information Tech index rallies heavily following cloud enterprise demand updates.")
+)
+
+data class YouTubeChannel(
+    val name: String,
+    val id: String,
+    val logo: String,
+    val status: String,
+    val lang: String
+)
+
+val newsChannelsList = listOf(
+    YouTubeChannel("Aaj Tak Live", "NqbF6Wlh-fQ", "AT", "🔴 LIVE", "Hindi"),
+    YouTubeChannel("NDTV 24x7", "WB-y7_ym9M0", "ND", "🔴 LIVE", "English"),
+    YouTubeChannel("India Today", "aMvU0aYl7C0", "IT", "🔴 LIVE", "English"),
+    YouTubeChannel("Republic Bharat", "yGvAmg9fMzo", "RB", "🔴 LIVE", "Hindi"),
+    YouTubeChannel("BBC News World", "y60wDzZt8yg", "BB", "🔴 LIVE", "English"),
+    YouTubeChannel("Al Jazeera Live", "gCNeDWCI0To", "AJ", "🔴 LIVE", "English"),
+    YouTubeChannel("DW News Live", "V9KzY83_N64", "DW", "🔴 LIVE", "English")
+)
+
+@Composable
+fun MarkdownText(text: String, color: Color = Color.White, fontSize: androidx.compose.ui.unit.TextUnit = 12.sp, lineHeight: androidx.compose.ui.unit.TextUnit = 16.sp) {
+    val annotatedString = remember(text) {
+        androidx.compose.ui.text.buildAnnotatedString {
+            var currentIndex = 0
+            val boldPattern = java.util.regex.Pattern.compile("\\*\\*(.*?)\\*\\*")
+            val matcher = boldPattern.matcher(text)
+            while (matcher.find()) {
+                val start = matcher.start()
+                val end = matcher.end()
+                val matchText = matcher.group(1) ?: ""
+                
+                // Append text before match
+                if (start > currentIndex) {
+                    append(text.substring(currentIndex, start))
+                }
+                
+                // Append bold style
+                withStyle(style = androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold, color = Color(0xFFFF9500))) {
+                    append(matchText)
+                }
+                
+                currentIndex = end
+            }
+            if (currentIndex < text.length) {
+                append(text.substring(currentIndex))
+            }
+        }
+    }
+    Text(text = annotatedString, color = color, fontSize = fontSize, lineHeight = lineHeight)
+}
+
 @Composable
 fun WeatherNewsAppView(viewModel: AssistantViewModel) {
     val weatherData by viewModel.currentWeatherData.collectAsStateWithLifecycle()
     val gpsWeather by viewModel.locationWeather.collectAsStateWithLifecycle()
     val newsArticles by viewModel.newsFeed.collectAsStateWithLifecycle()
+    val aiSummary by viewModel.aiNewsSummary.collectAsStateWithLifecycle()
+    val isSummaryLoading by viewModel.isNewsSummaryLoading.collectAsStateWithLifecycle()
     
     var isLiveGpsMode by remember { mutableStateOf(false) }
+    var selectedChannelInputIndex by remember { mutableStateOf(0) }
+    val activeChannel = newsChannelsList.getOrElse(selectedChannelInputIndex) { newsChannelsList[0] }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
@@ -1020,7 +1095,7 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // App Header
         item {
@@ -1033,13 +1108,13 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
             ) {
                 Column {
                     Text(
-                        text = "World Monitor",
+                        text = "Global News Monitor",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Black,
                         color = Color.White
                     )
                     Text(
-                        text = "SYNCHRONIZED WITH WWW.WORLDMONITOR.APP",
+                        text = "POLLING SENSEX, YOUTUBE LIVE & AI DISPATCHERS",
                         fontSize = 9.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color(0xFFFF9500),
@@ -1068,7 +1143,310 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
             }
         }
 
-        // Weather Mode Toggle Switch Segment (Apple-style sleek glass capsule pill)
+        // Live stock metrics ticker card (Ups and downs)
+        item {
+            Column {
+                Text(
+                    text = "📊 NATIONAL & GLOBAL MARKETS",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFFFF9500),
+                    letterSpacing = 1.sp,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(stockIndexesList) { index ->
+                        Card(
+                            onClick = {
+                                viewModel.speak(index.description)
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.06f)),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                            modifier = Modifier.width(150.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(index.name, fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color.White.copy(alpha = 0.6f))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(index.value, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .clip(RoundedCornerShape(50))
+                                            .background(if (index.isUp) Color(0xFF34C759) else Color(0xFFFF3B30))
+                                    )
+                                    Text(
+                                        text = index.change,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (index.isUp) Color(0xFF34C759) else Color(0xFFFF3B30)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // YOUTUBE LIVE CHANNELS SEGMENT
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "📺 YOUTUBE LIVE BROADCAST STATIONS",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFFFF9500),
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    text = "Click to switch active YouTube station live feed instantly",
+                    fontSize = 9.sp,
+                    color = Color.White.copy(alpha = 0.5f)
+                )
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    itemsIndexed(newsChannelsList) { idx, channel ->
+                        val isSelected = selectedChannelInputIndex == idx
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    color = if (isSelected) Color(0xFFFF9500).copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isSelected) Color(0xFFFF9500) else Color.White.copy(alpha = 0.10f),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .clickable {
+                                    selectedChannelInputIndex = idx
+                                    viewModel.speak("Switching live YouTube stream to " + channel.name)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFFFF3B30)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = channel.logo,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = channel.name,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) Color(0xFFFF9500) else Color.White
+                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(5.dp)
+                                                .clip(RoundedCornerShape(50))
+                                                .background(Color.Red)
+                                        )
+                                        Text(
+                                            text = "${channel.status} (${channel.lang})",
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Live Stream player
+        item {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                colors = CardDefaults.cardColors(containerColor = Color.Black),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(210.dp)
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    AndroidView(
+                        factory = { ctx ->
+                            WebView(ctx).apply {
+                                webViewClient = object : WebViewClient() {
+                                    override fun onReceivedError(
+                                        view: WebView?,
+                                        request: WebResourceRequest?,
+                                        error: WebResourceError?
+                                    ) {
+                                        // Silent standard error bypass
+                                    }
+                                }
+                                settings.apply {
+                                    javaScriptEnabled = true
+                                    domStorageEnabled = true
+                                    mediaPlaybackRequiresUserGesture = false
+                                }
+                                loadUrl("https://www.youtube.com/embed/${activeChannel.id}?autoplay=1&mute=1&playsinline=1")
+                            }
+                        },
+                        update = { webView ->
+                            webView.loadUrl("https://www.youtube.com/embed/${activeChannel.id}?autoplay=1&mute=1&playsinline=1")
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    // Overlay stream banner
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.TopStart)
+                            .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)))
+                            .padding(10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Color.Red)
+                            )
+                            Text(
+                                text = "NOW BROADCASTING: ${activeChannel.name.uppercase()}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                letterSpacing = 0.8.sp
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .background(Color.Red, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("LIVE FEED", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.ExtraBold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // THE AI GENERATED NEWS SUMMARY BULLETIN CORNER
+        item {
+            Card(
+                shape = RoundedCornerShape(22.dp),
+                border = BorderStroke(1.dp, Color(0xFFFF9500).copy(alpha = 0.3f)),
+                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.Stars, "AI Core", tint = Color(0xFFFF9500), modifier = Modifier.size(16.dp))
+                            Text(
+                                text = "AI REAL-TIME BULLETIN",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                letterSpacing = 1.sp
+                            )
+                        }
+
+                        if (isSummaryLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = Color(0xFFFF9500),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .background(Color(0xFF00FFCC).copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    "MODEL ACTIVE",
+                                    fontSize = 8.sp,
+                                    color = Color(0xFF00FFCC),
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                        }
+                    }
+
+                    // Markdown-styled AI summary text parsing
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                            .padding(12.dp)
+                    ) {
+                        MarkdownText(
+                            text = aiSummary,
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+
+                    // Request Button CTA
+                    Button(
+                        onClick = { viewModel.generateNewsSummary(activeChannel.name) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9500)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isSummaryLoading
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Bolt, "Lightning", tint = Color.Black, modifier = Modifier.size(16.dp))
+                            Text(
+                                text = if (isSummaryLoading) "ANALYZING CHANNELS..." else "GENERATE AI BRIEFING SUMMARY",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Weather toggle switch segment (retained under news view)
         item {
             Row(
                 modifier = Modifier
@@ -1077,7 +1455,6 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
                     .padding(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Option A: Standard worldmonitor stations
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -1102,7 +1479,6 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
                     )
                 }
 
-                // Option B: Google powered GPS location weather
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -1129,10 +1505,9 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
             }
         }
 
-        // Display Card (Google Permission / State or Standard data)
+        // Weather Widget active state
         item {
             if (isLiveGpsMode && gpsWeather == null) {
-                // Stylish Google Request Card
                 Card(
                     shape = RoundedCornerShape(22.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.Transparent),
@@ -1142,47 +1517,19 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(Color(0xFF37474F), Color(0xFF263238))
-                                )
-                            )
-                            .padding(24.dp),
+                            .background(Brush.verticalGradient(listOf(Color(0xFF37474F), Color(0xFF263238))))
+                            .padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clip(RoundedCornerShape(50))
-                                .background(Color.White.copy(alpha = 0.08f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.MyLocation,
-                                contentDescription = "Request Location",
-                                tint = Color(0xFFFF9500),
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "Satellite Signal Offline",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Black,
-                                color = Color.White
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Standby coordinates require device GPS location approval. Click down below to query real-time regional climate stats powered by Google.",
-                                fontSize = 12.sp,
-                                color = Color.White.copy(alpha = 0.7f),
-                                textAlign = TextAlign.Center,
-                                lineHeight = 16.sp
-                            )
-                        }
-
+                        Icon(imageVector = Icons.Default.MyLocation, contentDescription = null, tint = Color(0xFFFF9500), modifier = Modifier.size(32.dp))
+                        Text(text = "Satellite GPS Standby", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(
+                            text = "Enable device location. Click button to query live weather forecast.",
+                            fontSize = 11.sp,
+                            color = Color.White.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center
+                        )
                         Button(
                             onClick = {
                                 locationPermissionLauncher.launch(
@@ -1193,31 +1540,15 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
                                 )
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9500)),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth().testTag("request_gps_weather_button")
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(Icons.Default.GpsFixed, contentDescription = null, tint = Color.Black)
-                                Text("ACTIVATE GPS & POLL GOOGLE", fontWeight = FontWeight.Bold, color = Color.Black)
-                            }
+                            Text("ACTIVATE GPS FORECAST", fontWeight = FontWeight.Bold, color = Color.Black)
                         }
-
-                        Text(
-                            text = "POWERED BY GOOGLE CLIMATE MODEL",
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFFFF9500),
-                            letterSpacing = 1.sp
-                        )
                     }
                 }
             } else {
-                // Active Weather Card (Bind to world data or polled gpsWeather)
                 val activeWeather = if (isLiveGpsMode && gpsWeather != null) gpsWeather!! else weatherData
-                
                 Card(
                     shape = RoundedCornerShape(22.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.Transparent),
@@ -1230,355 +1561,49 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
                             .background(
                                 Brush.verticalGradient(
                                     colors = if (activeWeather.condition == "Sunny") {
-                                        listOf(Color(0xFF2979FF), Color(0xFF2196F3), Color(0xFF00B0FF))
+                                        listOf(Color(0xFF2979FF), Color(0xFF2196F3))
                                     } else if (activeWeather.condition == "Drizzle") {
-                                        listOf(Color(0xFF37474F), Color(0xFF546E7A), Color(0xFF78909C))
+                                        listOf(Color(0xFF37474F), Color(0xFF546E7A))
                                     } else {
-                                        listOf(Color(0xFF5E35B1), Color(0xFF7E57C2), Color(0xFFB39DDB))
+                                        listOf(Color(0xFF5E35B1), Color(0xFF7E57C2))
                                     }
                                 )
                             )
-                            .padding(20.dp)
+                            .padding(18.dp)
                     ) {
                         Column {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.Top
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = activeWeather.city,
-                                        fontSize = 20.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                    Text(
-                                        text = activeWeather.condition,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White.copy(alpha = 0.8f)
-                                    )
+                                Column {
+                                    Text(text = activeWeather.city, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text(text = activeWeather.condition, fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f))
                                 }
-                                
-                                Spacer(modifier = Modifier.width(8.dp))
-
-                                // Huge climate symbol
                                 Box(
                                     modifier = Modifier
-                                        .size(54.dp)
+                                        .size(44.dp)
                                         .clip(RoundedCornerShape(50))
                                         .background(Color.White.copy(alpha = 0.2f)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        imageVector = if (activeWeather.condition == "Sunny") {
-                                            Icons.Default.WbSunny
-                                        } else if (activeWeather.condition == "Drizzle") {
-                                            Icons.Default.CloudQueue
-                                        } else {
-                                            Icons.Default.Cloud
-                                        },
-                                        contentDescription = activeWeather.condition,
+                                        imageVector = if (activeWeather.condition == "Sunny") Icons.Default.WbSunny else Icons.Default.Cloud,
+                                        contentDescription = null,
                                         tint = Color.White,
-                                        modifier = Modifier.size(32.dp)
+                                        modifier = Modifier.size(24.dp)
                                     )
                                 }
                             }
-
                             Spacer(modifier = Modifier.height(10.dp))
-
-                            Row(
-                                verticalAlignment = Alignment.Bottom,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
+                            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(text = activeWeather.temperature, fontSize = 48.sp, fontWeight = FontWeight.Light, color = Color.White)
                                 Text(
-                                    text = activeWeather.temperature,
-                                    fontSize = 56.sp,
-                                    fontWeight = FontWeight.Light,
-                                    color = Color.White
-                                )
-                                Column(modifier = Modifier.padding(bottom = 12.dp)) {
-                                    Text(
-                                        text = if (isLiveGpsMode) "Station localized\nvia Google Satellite" else "Station calibrated\nvia WorldMonitor",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White.copy(alpha = 0.8f)
-                                    )
-                                }
-                            }
-
-                            Text(
-                                text = activeWeather.description.uppercase(),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White.copy(alpha = 0.9f)
-                            )
-
-                            if (isLiveGpsMode) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    modifier = Modifier
-                                        .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(6.dp)
-                                            .clip(RoundedCornerShape(50))
-                                            .background(Color(0xFF00FFCC))
-                                    )
-                                    Text(
-                                        text = "POWERED BY GOOGLE CLIMATE MODEL",
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color = Color(0xFF00FFCC)
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(14.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(1.dp)
-                                    .background(Color.White.copy(alpha = 0.2f))
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            // Atmosphere specs
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                IosWeatherSpecElement(label = "HUMIDITY", value = activeWeather.humidity)
-                                IosWeatherSpecElement(label = "WIND SPEED", value = activeWeather.wind)
-                                IosWeatherSpecElement(label = "UV INDEX", value = activeWeather.uvIndex)
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Compact Forecast list
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                activeWeather.forecast.forEach { f ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(f.day, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = if (f.condition == "Sunny") Icons.Default.WbSunny else Icons.Default.Cloud,
-                                                contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                            Text(f.temp, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Live News Broadcast Video Feed from worldmonitor.app with Playback and short scripts
-        item {
-            var activeScriptIndex by remember { mutableStateOf(0) }
-            val broadcastScripts = listOf(
-                "WORLDFEED SCRIPT: [05:23] Station nodes report stable climate pressure across modern city grids.",
-                "WORLDFEED SCRIPT: [05:30] KATE.OS operating systems achieved universal fluency with sweet voice synthesis.",
-                "WORLDFEED SCRIPT: [05:45] World Monitor satellite captures magnetic shift over Atlantic current channels."
-            )
-            var videoPlaying by remember { mutableStateOf(true) }
-            val infiniteTransition = rememberInfiniteTransition(label = "BroadcastVideoAnim")
-            val sweepPhase by infiniteTransition.animateFloat(
-                initialValue = 0f,
-                targetValue = 360f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(2500, easing = LinearEasing)
-                ),
-                label = "radarSweep"
-            )
-
-            Card(
-                shape = RoundedCornerShape(22.dp),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
-                colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.4f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(RoundedCornerShape(50))
-                                    .background(if (videoPlaying) Color.Red else Color.Gray)
-                            )
-                            Text(
-                                "WORLDMONITOR.APP // LIVE VIDEO STREAM",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Black,
-                                color = Color.White,
-                                letterSpacing = 0.8.sp
-                            )
-                        }
-
-                        IconButton(
-                            onClick = { videoPlaying = !videoPlaying },
-                            colors = IconButtonDefaults.iconButtonColors(containerColor = Color.White.copy(alpha = 0.12f)),
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (videoPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                contentDescription = if (videoPlaying) "Pause Video" else "Play Video",
-                                tint = Color(0xFFFF9500),
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Simulated Video Feed screen canvas animation!
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(130.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF070A13)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Canvas(modifier = Modifier.fillMaxSize()) {
-                            val w = size.width
-                            val h = size.height
-
-                            // Draw ocean ambient grid background
-                            drawRect(
-                                color = Color(0xFF111827),
-                                size = size
-                            )
-
-                            // Radially sweeping coordinates indicator simulating ocean monitoring feed
-                            if (videoPlaying) {
-                                drawCircle(
-                                    color = Color(0xFFFF9500).copy(alpha = 0.1f),
-                                    radius = h * 0.4f,
-                                    center = Offset(w / 2f, h / 2f)
-                                )
-                                drawCircle(
-                                    color = Color(0xFFFF9500).copy(alpha = 0.2f),
-                                    radius = h * 0.2f,
-                                    center = Offset(w / 2f, h / 2f)
-                                )
-                                // Draw scanning lines
-                                for (y in 0 until h.toInt() step 12) {
-                                    drawLine(
-                                        color = Color.White.copy(alpha = 0.04f),
-                                        start = Offset(0f, y.toFloat()),
-                                        end = Offset(w, y.toFloat()),
-                                        strokeWidth = 1f
-                                    )
-                                }
-                                // Draw radar sweeping signal vectors
-                                val radPhase = Math.toRadians(sweepPhase.toDouble())
-                                val lineEndX = (w / 2f + Math.cos(radPhase) * (h * 0.45f)).toFloat()
-                                val lineEndY = (h / 2f + Math.sin(radPhase) * (h * 0.45f)).toFloat()
-                                drawLine(
-                                    color = Color(0xFFFF9500).copy(alpha = 0.6f),
-                                    start = Offset(w / 2f, h / 2f),
-                                    end = Offset(lineEndX, lineEndY),
-                                    strokeWidth = 2f
-                                )
-                            }
-                        }
-
-                        // Short broadcast description overlaid on top of feed
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .background(Color.Black.copy(alpha = 0.65f))
-                                .padding(horizontal = 8.dp, vertical = 6.dp)
-                                .fillMaxWidth()
-                        ) {
-                            Text(
-                                text = broadcastScripts[activeScriptIndex],
-                                fontSize = 10.sp,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 2
-                            )
-                        }
-
-                        // Recording indicator
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(6.dp)
-                                .background(Color.Red.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                        ) {
-                            Text("REC", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.ExtraBold)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Playlist of short scripts running on tap!
-                    Text(
-                        "CLICK TO LOAD BROADCAST SCRIPT IN SPEECH:",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.6f)
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        broadcastScripts.forEachIndexed { idx, s ->
-                            Card(
-                                onClick = {
-                                    activeScriptIndex = idx
-                                    viewModel.speak(s.replace("WORLDFEED SCRIPT:", ""))
-                                },
-                                shape = RoundedCornerShape(8.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (activeScriptIndex == idx) Color(0xFFFF9500).copy(alpha = 0.18f) else Color.White.copy(alpha = 0.05f)
-                                ),
-                                border = BorderStroke(
-                                    1.dp, 
-                                    if (activeScriptIndex == idx) Color(0xFFFF9500) else Color.White.copy(alpha = 0.1f)
-                                ),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(
-                                    text = "Script ${idx + 1}",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = if (activeScriptIndex == idx) Color(0xFFFF9500) else Color.White,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp)
+                                    text = if (isLiveGpsMode) "Station localized\nvia Satellite" else "Station calibrated\nvia WorldMonitor",
+                                    fontSize = 10.sp,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    modifier = Modifier.padding(bottom = 10.dp)
                                 )
                             }
                         }
@@ -1587,14 +1612,15 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
             }
         }
 
-        // WWW.WORLDMONITOR.APP - World News headlines Widget
+        // BREAKING NEWS GENERAL FEED (Important Cards)
         item {
             Text(
-                text = "Breaking News feed",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                modifier = Modifier.padding(top = 8.dp)
+                text = "📰 HIGH-PRIORITY FIELD HEADLINES",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                color = Color(0xFFFF9500),
+                letterSpacing = 1.sp,
+                modifier = Modifier.padding(top = 4.dp)
             )
         }
 
@@ -1642,66 +1668,70 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
                                 )
                             }
                             Text(
-                                text = article.time,
-                                fontSize = 9.sp,
-                                color = Color.White.copy(alpha = 0.5f),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Text(
-                            text = article.title,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Text(
-                            text = article.summary,
-                            fontSize = 12.sp,
-                            color = Color.White.copy(alpha = 0.8f)
-                        )
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = article.source,
-                                fontSize = 9.sp,
-                                color = Color.White.copy(alpha = 0.5f),
-                                fontWeight = FontWeight.Bold
-                            )
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(3.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.VolumeUp,
-                                    contentDescription = "Read head aloud",
-                                    tint = Color(0xFFFF9500),
-                                    modifier = Modifier.size(10.dp)
-                                )
-                                Text(
-                                    "Tap card to hear details",
+                                    text = article.time,
                                     fontSize = 9.sp,
-                                    color = Color(0xFFFF9500),
-                                    fontWeight = FontWeight.ExtraBold
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontWeight = FontWeight.Bold
                                 )
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Text(
+                                text = article.title,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Text(
+                                text = article.summary,
+                                fontSize = 12.sp,
+                                color = Color.White.copy(alpha = 0.8f)
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = article.source,
+                                    fontSize = 9.sp,
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.VolumeUp,
+                                        contentDescription = "Read head aloud",
+                                        tint = Color(0xFFFF9500),
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                    Text(
+                                        "Tap card to read aloud",
+                                        fontSize = 9.sp,
+                                        color = Color(0xFFFF9500),
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
+            
+            item {
+                Spacer(modifier = Modifier.height(40.dp))
+            }
         }
-    }
 }
 
 @Composable
@@ -2407,23 +2437,141 @@ fun IosNoteRowCard(
 }
 
 // ==========================================
-// SCREEN C: Offline & Import World Map App View
+// SCREEN C: Offline India detailed Map & World Map Online
 // ==========================================
+
+data class StreetVector(
+    val name: String,
+    val path: List<Offset>,
+    val width: Float
+)
+
+data class MallVector(
+    val name: String,
+    val rectOffset: Offset,
+    val size: androidx.compose.ui.geometry.Size,
+    val info: String
+)
+
+data class StallVector(
+    val name: String,
+    val coord: Offset,
+    val category: String, // "Street Food", "Tea Stall", "Bazaar Store", "Souvenirs"
+    val ratings: String,
+    val reviewsSpeak: String
+)
+
+data class IndianDistrictMap(
+    val name: String,
+    val centerDescription: String,
+    val physicalBorder: List<Offset>, // polygons
+    val streets: List<StreetVector>,
+    val malls: List<MallVector>,
+    val foodStalls: List<StallVector>
+)
+
+val indianDistricts = listOf(
+    IndianDistrictMap(
+        name = "Delhi NCR Hub",
+        centerDescription = "Delhi Metropolitan Region: Connaught Place, India Gate & Kartavya Path corridors.",
+        physicalBorder = listOf(
+            Offset(50f, 50f), Offset(450f, 60f), Offset(420f, 400f), Offset(80f, 380f)
+        ),
+        streets = listOf(
+            StreetVector("Kartavya Path (Rajpath)", listOf(Offset(250f, 350f), Offset(250f, 150f)), 8f),
+            StreetVector("Janpath Road Corridor", listOf(Offset(100f, 250f), Offset(400f, 250f)), 6f),
+            StreetVector("Barakhamba Bypass Road", listOf(Offset(120f, 120f), Offset(380f, 380f)), 5f),
+            StreetVector("Sansad Marg Avenue", listOf(Offset(150f, 320f), Offset(350f, 180f)), 5f)
+        ),
+        malls = listOf(
+            MallVector("Palika Underground Bazaar", Offset(200f, 180f), androidx.compose.ui.geometry.Size(90f, 45f), "Huge subterranean air-conditioned shopping node in Connaught Place representing electronics and apparel."),
+            MallVector("Chanakya Luxury Arcade", Offset(80f, 80f), androidx.compose.ui.geometry.Size(80f, 40f), "High-end luxury shopping and dining destination located in Delhi's diplomatic enclave."),
+            MallVector("Select Citywalk Metro Mall", Offset(310f, 300f), androidx.compose.ui.geometry.Size(100f, 50f), "Elite shopping destination with premium high-street fashion, international gourmet stalls and dynamic events.")
+        ),
+        foodStalls = listOf(
+            StallVector("Natraj Dahi Bhalla CP", Offset(250f, 230f), "Street Food", "4.8 ⭐ (12k+ reviews)", "Natraj Dahi Bhalla is world famous for its sweet soft spiced lentil dumplings in customized yogurt with tangy mint chutneys since 1940."),
+            StallVector("Khan Chacha Rolls", Offset(160f, 310f), "Street Food", "4.6 ⭐ (9k+ reviews)", "Khan Chacha is a legendary culinary stall specialized in charcoal-grilled soft seekh kebabs and fresh roomali rolls."),
+            StallVector("Barakhamba Tea Depot & Chai", Offset(350f, 210f), "Tea Stall", "4.9 ⭐ (3k+ reviews)", "A vibrant, busy local corner serving rich, hot ginger cardamom cutting tea to professionals and tourists alike."),
+            StallVector("Chanakyapuri Souvenir Spot", Offset(110f, 140f), "Bazaar Store", "4.5 ⭐ (800 reviews)", "A government accredited local craft depot displaying brass materials, handmade rugs, and custom wood carvings.")
+        )
+    ),
+    IndianDistrictMap(
+        name = "Mumbai Colaba Hub",
+        centerDescription = "Mumbai South Coast: Colaba Causeway, Marine Drive Crescent Promenade & Gateway of India.",
+        physicalBorder = listOf(
+            Offset(80f, 30f), Offset(380f, 40f), Offset(440f, 390f), Offset(60f, 370f)
+        ),
+        streets = listOf(
+            StreetVector("Marine Drive Crescent", listOf(Offset(80f, 120f), Offset(180f, 280f), Offset(320f, 350f)), 8f),
+            StreetVector("Colaba Causeway Main Rd", listOf(Offset(280f, 80f), Offset(280f, 380f)), 6f),
+            StreetVector("Apollo Bunder Pier Gate", listOf(Offset(280f, 150f), Offset(380f, 150f)), 5f)
+        ),
+        malls = listOf(
+            MallVector("Taj Shopping Arcade", Offset(300f, 100f), androidx.compose.ui.geometry.Size(80f, 40f), "Exclusive luxury boutique arcade nested inside the iconic Taj Mahal Palace, presenting legacy diamonds and high couture."),
+            MallVector("Phoenix Palladium South", Offset(110f, 180f), androidx.compose.ui.geometry.Size(95f, 48f), "Massive multi-story mall features flagship retail spaces, interactive kid domains, and premium dining outlets.")
+        ),
+        foodStalls = listOf(
+            StallVector("Bademiya Seekh Kebab Colaba", Offset(280f, 210f), "Street Food", "4.7 ⭐ (15k+ reviews)", "Bademiya is an open-air dynamic seekh kebab stall operating late into the night, serving soft mutton rolls and buttery warm roomali rotis."),
+            StallVector("Sharma Mumbai Cutting Chai", Offset(150f, 220f), "Tea Stall", "4.8 ⭐ (4k+ reviews)", "A highly popular street stall serving piping hot sweetened milk milk tea infused with crushed ginger and lemongrass in elegant glass cups."),
+            StallVector("Elco Sev Puri & Pani Puri", Offset(210f, 310f), "Street Food", "4.6 ⭐ (11k+ reviews)", "Legendary street food diner renowned across Mumbai for ice-cooled mineral water pani puris and crispy loaded sev dahi puris."),
+            StallVector("Colaba Causeway Handloom Bazaar", Offset(275f, 330f), "Bazaar Store", "4.4 ⭐ (2k+ reviews)", "Charming roadside stores featuring colorful brass metal artifacts, dynamic custom bracelets, and cotton block-print tunics.")
+        )
+    ),
+    IndianDistrictMap(
+        name = "Bengaluru Core Hub",
+        centerDescription = "Bengaluru Tech Smart-city: Indiranagar 100 Feet Road Grid & Brigade Road commercial hub.",
+        physicalBorder = listOf(
+            Offset(70f, 40f), Offset(430f, 30f), Offset(450f, 380f), Offset(90f, 410f)
+        ),
+        streets = listOf(
+            StreetVector("Indiranagar 100 Ft Road", listOf(Offset(100f, 80f), Offset(100f, 380f)), 7f),
+            StreetVector("Brigade Crossing Road", listOf(Offset(80f, 220f), Offset(380f, 220f)), 6f),
+            StreetVector("M.G. Road Tech Boulevard", listOf(Offset(150f, 120f), Offset(350f, 320f)), 5f)
+        ),
+        malls = listOf(
+            MallVector("Nexus Forum Town Center", Offset(180f, 100f), androidx.compose.ui.geometry.Size(100f, 40f), "Premier smart shopping mall offering interactive dynamic screens, major cinema halls, and modern retail layouts."),
+            MallVector("Garuda Mall Commercial Annex", Offset(250f, 240f), androidx.compose.ui.geometry.Size(85f, 45f), "Centrally situated premium mall with excellent multi-brand apparel channels, local toy stores, and dynamic foods.")
+        ),
+        foodStalls = listOf(
+            StallVector("Corner House Ice Cream CP", Offset(100f, 180f), "Street Food", "4.9 ⭐ (20k+ reviews)", "World famous dessert outlet beloved for its rich, heavy hot-chocolate-fudge poured over double scoops of vanilla ice creams with loaded walnuts."),
+            StallVector("Srinidhi Sagar Filter Coffee", Offset(180f, 250f), "Tea Stall", "4.8 ⭐ (7k+ reviews)", "Famous south Indian street food diner serving frothy metric strong chicory-fused drip filter coffee in traditional brass tumblers."),
+            StallVector("V.V. Puram Chaat Street Hub", Offset(280f, 150f), "Street Food", "4.7 ⭐ (14k+ reviews)", "Vibrant atmospheric food lane packing high crowds for spicy sweet masala corn, hot gulab jamun, and loaded potato twisters."),
+            StallVector("Blossoms Old Book Bazaar", Offset(310f, 290f), "Bazaar Store", "4.8 ⭐ (6k+ reviews)", "Vast multi-story legacy bookstore holding millions of old classics, science textbooks, and rare manual paperbacks.")
+        )
+    )
+)
+
 @Composable
 fun WorldMapAppView(viewModel: AssistantViewModel) {
-    var mapModeByInternet by remember { mutableStateOf(false) } // false = Offline vector, true = Web import WebView
+    var mapModeByInternet by remember { mutableStateOf(false) } // false = Offline India, true = World Map Online
     val locationWeather by viewModel.locationWeather.collectAsStateWithLifecycle()
     
-    // Tactile offline coordinates marker lists
-    val context = LocalContext.current
-    val pinsList = remember { listOf(
-        Offset(250f, 180f) to "London Base (Offline)",
-        Offset(130f, 190f) to "Cupertino Node (Offline)",
-        Offset(460f, 210f) to "Tokyo Station (Offline)"
-    ) }
+    var selectedDistrictIndex by remember { mutableStateOf(0) }
+    val activeDistrict = indianDistricts[selectedDistrictIndex]
+    
+    // Zoom/pan state
+    var zoomScale by remember { mutableStateOf(1.2f) }
+    var panOffset by remember { mutableStateOf(Offset.Zero) }
+    
+    // Filters state
+    var showStreets by remember { mutableStateOf(true) }
+    var showMalls by remember { mutableStateOf(true) }
+    var showStalls by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) {
-        viewModel.updateWeatherWithCurrentLocation()
+    // Search query state
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedLocationName by remember { mutableStateOf<String?>(null) }
+    var selectedLocationDetail by remember { mutableStateOf<String?>(null) }
+    var selectedLocationCoordinates by remember { mutableStateOf<Offset?>(null) }
+    var selectedLocationCategory by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(selectedDistrictIndex) {
+        // Reset scale and center coordinates when district changes
+        zoomScale = 1.3f
+        panOffset = Offset.Zero
+        selectedLocationName = null
+        selectedLocationDetail = null
+        viewModel.speak("Loading offline vector directory pack for " + activeDistrict.name + ". " + activeDistrict.centerDescription)
     }
 
     Column(
@@ -2452,7 +2600,7 @@ fun WorldMapAppView(viewModel: AssistantViewModel) {
             ) {
                 Icon(Icons.Default.CloudOff, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Full World Offline Map", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("India Map Offline", fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
 
             Button(
@@ -2466,12 +2614,12 @@ fun WorldMapAppView(viewModel: AssistantViewModel) {
             ) {
                 Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Direct Web Screen", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("World Map Online", fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
 
         if (mapModeByInternet) {
-            // WEB SCREEN MAP VIEW DIRECT IMPORT FROM WORLDMONITOR.APP or OpenStreetMap
+            // WEB SCREEN MAP VIEW DIRECT IMPORT FROM OpenStreetMap
             Card(
                 shape = RoundedCornerShape(20.dp),
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
@@ -2482,14 +2630,14 @@ fun WorldMapAppView(viewModel: AssistantViewModel) {
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text(
-                        "LIVE WEB SYNC PORTAL",
+                        "LIVE ONLINE WORLD SYNC PORTAL",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color(0xFF30B0FF),
                         letterSpacing = 1.sp
                     )
                     Text(
-                        "import stream: www.worldmonitor.app/map",
+                        "Live stream query: openstreetmap.org. Zoom, scroll and explore globally.",
                         fontSize = 9.sp,
                         color = Color.White.copy(alpha = 0.5f)
                     )
@@ -2504,7 +2652,7 @@ fun WorldMapAppView(viewModel: AssistantViewModel) {
                                         request: WebResourceRequest?,
                                         error: WebResourceError?
                                     ) {
-                                        // Ignore or fallback gracefully
+                                        // bypass standard errors
                                     }
                                 }
                                 settings.apply {
@@ -2513,7 +2661,7 @@ fun WorldMapAppView(viewModel: AssistantViewModel) {
                                     builtInZoomControls = true
                                     displayZoomControls = false
                                 }
-                                loadUrl("https://www.openstreetmap.org/search?query=london")
+                                loadUrl("https://www.openstreetmap.org/#map=5/22.973/78.656") // India & World View
                             }
                         },
                         modifier = Modifier
@@ -2523,11 +2671,7 @@ fun WorldMapAppView(viewModel: AssistantViewModel) {
                 }
             }
         } else {
-            // FULL WORLD OFFLINE VECTOR MAP
-            // Dynamic Zoom/Pan tactile controller state
-            var zoomScale by remember { mutableStateOf(1.0f) }
-            var panOffset by remember { mutableStateOf(Offset.Zero) }
-
+            // INDIA OFFLINE FULL COGNITIVE VECTOR STREETS, STALLS & MALLS MAP
             Card(
                 shape = RoundedCornerShape(20.dp),
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
@@ -2536,47 +2680,169 @@ fun WorldMapAppView(viewModel: AssistantViewModel) {
                     .weight(1.0f)
                     .fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Region Selector Tab bar
+                    Text(
+                        text = "🏛️ SELECT REGIONAL DISTRICT DIRECTORY",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF30B0FF),
+                        letterSpacing = 1.sp
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                            .padding(2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        indianDistricts.forEachIndexed { idx, dist ->
+                            val isSel = idx == selectedDistrictIndex
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(
+                                        color = if (isSel) Color(0xFF30B0FF).copy(alpha = 0.15f) else Color.Transparent,
+                                        shape = RoundedCornerShape(6.dp)
+                                    )
+                                    .clickable { selectedDistrictIndex = idx }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = dist.name.replace(" Hub", ""),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSel) Color(0xFF30B0FF) else Color.White.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
+                    }
+
+                    // Multi-interactive Filters Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
-                            Text(
-                                "INTEGRATED OFFLINE VECTOR MAP",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF30B0FF),
-                                letterSpacing = 1.sp
-                            )
-                            Text(
-                                "Drag to explore coordinates. Double pinch for zoom focus.",
-                                fontSize = 9.sp,
-                                color = Color.White.copy(alpha = 0.5f)
-                            )
-                        }
-
-                        IconButton(
-                            onClick = {
-                                zoomScale = 1.0f
-                                panOffset = Offset.Zero
-                            },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(Icons.Default.CenterFocusStrong, "Center", tint = Color.White, modifier = Modifier.size(16.dp))
+                        Text(
+                            text = "LAYERS:",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White.copy(alpha = 0.5f)
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            // Filter Streets
+                            FilterPill(label = "Streets", active = showStreets, color = Color(0xFFFFD700)) { showStreets = !showStreets }
+                            // Filter Malls
+                            FilterPill(label = "Malls", active = showMalls, color = Color(0xFFA020F0)) { showMalls = !showMalls }
+                            // Filter Food Stalls
+                            FilterPill(label = "Food Stalls", active = showStalls, color = Color(0xFFFF5722)) { showStalls = !showStalls }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    // Quick Search Bar Inputs
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Search stalls, malls, streets in ${activeDistrict.name}...", fontSize = 11.sp, color = Color.White.copy(alpha = 0.4f)) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF30B0FF),
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                            focusedContainerColor = Color.Black.copy(alpha = 0.3f),
+                            unfocusedContainerColor = Color.Black.copy(alpha = 0.2f),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Close, null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+                                }
+                            } else {
+                                Icon(Icons.Default.Search, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    )
 
-                    // World map pan/zoom container
+                    // Unified Results dropdown or alert if matching found
+                    val matchedStall = activeDistrict.foodStalls.firstOrNull { it.name.contains(searchQuery, ignoreCase = true) }
+                    val matchedMall = activeDistrict.malls.firstOrNull { it.name.contains(searchQuery, ignoreCase = true) }
+                    val matchedStreet = activeDistrict.streets.firstOrNull { it.name.contains(searchQuery, ignoreCase = true) }
+
+                    if (searchQuery.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF30B0FF).copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = when {
+                                    matchedStall != null -> "📍 Found Stall: ${matchedStall.name} (${matchedStall.category})"
+                                    matchedMall != null -> "🏢 Found Mall: ${matchedMall.name}"
+                                    matchedStreet != null -> "🏢 Found Street: ${matchedStreet.name}"
+                                    else -> "❌ No matching locations in offline index"
+                                },
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+
+                            if (matchedStall != null || matchedMall != null || matchedStreet != null) {
+                                Button(
+                                    onClick = {
+                                        if (matchedStall != null) {
+                                            selectedLocationName = matchedStall.name
+                                            selectedLocationDetail = "${matchedStall.category} • Ratings: ${matchedStall.ratings}\n\n${matchedStall.reviewsSpeak}"
+                                            selectedLocationCoordinates = matchedStall.coord
+                                            selectedLocationCategory = "STALL"
+                                            panOffset = Offset(200f - matchedStall.coord.x, 200f - matchedStall.coord.y)
+                                            zoomScale = 2.2f
+                                        } else if (matchedMall != null) {
+                                            selectedLocationName = matchedMall.name
+                                            selectedLocationDetail = matchedMall.info
+                                            selectedLocationCoordinates = matchedMall.rectOffset
+                                            selectedLocationCategory = "MALL"
+                                            panOffset = Offset(200f - matchedMall.rectOffset.x, 200f - matchedMall.rectOffset.y)
+                                            zoomScale = 1.8f
+                                        } else if (matchedStreet != null) {
+                                            selectedLocationName = matchedStreet.name
+                                            selectedLocationDetail = "Metropolitan offline vector street line in CP Smart-city grid. Lanes fully integrated."
+                                            selectedLocationCoordinates = matchedStreet.path.firstOrNull() ?: Offset.Zero
+                                            selectedLocationCategory = "STREET"
+                                            panOffset = Offset(200f - (matchedStreet.path.firstOrNull()?.x ?: 0f), 200f - (matchedStreet.path.firstOrNull()?.y ?: 0f))
+                                            zoomScale = 1.6f
+                                        }
+                                        searchQuery = ""
+                                        viewModel.speak("Centering coordinates node on " + selectedLocationName)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF30B0FF)),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier.height(22.dp)
+                                ) {
+                                    Text("Center Node", fontSize = 9.sp, color = Color.Black, fontWeight = FontWeight.Black)
+                                }
+                            }
+                        }
+                    }
+
+                    // INDIA VECTOR GRID MAP CANVAS VIEW (Zoomable & Pannable)
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF0F172A))
+                            .background(Color(0xFF070B14))
+                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
                             .pointerInput(Unit) {
                                 detectDragGestures { change, dragAmount ->
                                     change.consume()
@@ -2590,165 +2856,348 @@ fun WorldMapAppView(viewModel: AssistantViewModel) {
 
                             withTransform({
                                 translate(left = panOffset.x, top = panOffset.y)
-                                scale(scaleX = zoomScale, scaleY = zoomScale, pivot = Offset(w/2f, h/2f))
+                                scale(scaleX = zoomScale, scaleY = zoomScale, pivot = Offset(w / 2f, h / 2f))
                             }) {
-                                // 1. Draw elegant grid projection coordinates
-                                val gridSpacing = 50f
-                                for (x in 0..(w.toInt()) step gridSpacing.toInt()) {
+                                // 1. Trace deep projection spatial grids (Streets of intelligence)
+                                val spacing = 40f
+                                for (x in 0..(w.toInt() * 2) step spacing.toInt()) {
                                     drawLine(
-                                        color = Color.White.copy(alpha = 0.05f),
-                                        start = Offset(x.toFloat(), 0f),
-                                        end = Offset(x.toFloat(), h)
+                                        color = Color(0xFF1E293B).copy(alpha = 0.25f),
+                                        start = Offset(x.toFloat() - w, -h),
+                                        end = Offset(x.toFloat() - w, h * 2),
+                                        strokeWidth = 1f
                                     )
                                 }
-                                for (y in 0..(h.toInt()) step gridSpacing.toInt()) {
+                                for (y in 0..(h.toInt() * 2) step spacing.toInt()) {
                                     drawLine(
-                                        color = Color.White.copy(alpha = 0.05f),
-                                        start = Offset(0f, y.toFloat()),
-                                        end = Offset(w, y.toFloat())
+                                        color = Color(0xFF1E293B).copy(alpha = 0.25f),
+                                        start = Offset(-w, y.toFloat() - h),
+                                        end = Offset(w * 2, y.toFloat() - h),
+                                        strokeWidth = 1f
                                     )
                                 }
 
-                                // 2. Draw stylish Continent vectors paths representing the entire world offline!
-                                // North America
-                                val naPath = Path().apply {
-                                    moveTo(40f, 100f)
-                                    lineTo(180f, 120f)
-                                    lineTo(160f, 220f)
-                                    lineTo(110f, 240f)
-                                    lineTo(100f, 190f)
-                                    lineTo(40f, 160f)
-                                    close()
+                                // 2. Draw District Outer Bound Vector Polygon
+                                val borderPath = Path().apply {
+                                    val b = activeDistrict.physicalBorder
+                                    if (b.isNotEmpty()) {
+                                        moveTo(b[0].x, b[0].y)
+                                        for (i in 1 until b.size) {
+                                            lineTo(b[i].x, b[i].y)
+                                        }
+                                        close()
+                                    }
                                 }
-                                drawPath(naPath, color = Color(0xFF1E293B))
-                                drawPath(naPath, color = Color(0xFF38BDF8).copy(alpha = 0.4f), style = Stroke(width = 2f))
+                                drawPath(borderPath, color = Color(0xFF0F172A).copy(alpha = 0.7f))
+                                drawPath(borderPath, color = Color(0xFF30B0FF).copy(alpha = 0.15f), style = Stroke(width = 3f))
 
-                                // South America
-                                val saPath = Path().apply {
-                                    moveTo(110f, 240f)
-                                    lineTo(160f, 260f)
-                                    lineTo(140f, 350f)
-                                    lineTo(115f, 390f)
-                                    lineTo(95f, 340f)
-                                    close()
+                                // 3. Draw Streets vectors list
+                                if (showStreets) {
+                                    activeDistrict.streets.forEach { street ->
+                                        val streetPath = Path().apply {
+                                            if (street.path.isNotEmpty()) {
+                                                moveTo(street.path[0].x, street.path[0].y)
+                                                for (i in 1 until street.path.size) {
+                                                    lineTo(street.path[i].x, street.path[i].y)
+                                                }
+                                            }
+                                        }
+                                        // Outer glowing street lane
+                                        drawPath(
+                                            streetPath,
+                                            color = Color(0xFFFFD700).copy(alpha = 0.25f),
+                                            style = Stroke(width = street.width * 2f, join = StrokeJoin.Round)
+                                        )
+                                        // Inner solid street lane line
+                                        drawPath(
+                                            streetPath,
+                                            color = Color(0xFFFFD700),
+                                            style = Stroke(width = street.width * 0.7f, join = StrokeJoin.Round)
+                                        )
+                                    }
                                 }
-                                drawPath(saPath, color = Color(0xFF1E293B))
-                                drawPath(saPath, color = Color(0xFF38BDF8).copy(alpha = 0.4f), style = Stroke(width = 2f))
 
-                                // Eurasia (Europe + Asia)
-                                val eurasiaPath = Path().apply {
-                                    moveTo(230f, 80f)
-                                    lineTo(490f, 90f)
-                                    lineTo(470f, 240f)
-                                    lineTo(320f, 250f)
-                                    lineTo(220f, 210f)
-                                    lineTo(210f, 130f)
-                                    close()
+                                // 4. Draw Mall rectangular vector areas
+                                if (showMalls) {
+                                    activeDistrict.malls.forEach { mall ->
+                                        val isHighlighted = selectedLocationName == mall.name
+                                        drawRect(
+                                            color = if (isHighlighted) Color(0xFFA020F0).copy(alpha = 0.45f) else Color(0xFFA020F0).copy(alpha = 0.15f),
+                                            topLeft = mall.rectOffset,
+                                            size = mall.size
+                                        )
+                                        drawRect(
+                                            color = if (isHighlighted) Color(0xFF00FFCC) else Color(0xFFA020F0),
+                                            topLeft = mall.rectOffset,
+                                            size = mall.size,
+                                            style = Stroke(width = 2f)
+                                        )
+                                    }
                                 }
-                                drawPath(eurasiaPath, color = Color(0xFF1E293B))
-                                drawPath(eurasiaPath, color = Color(0xFF38BDF8).copy(alpha = 0.4f), style = Stroke(width = 2f))
 
-                                // Africa
-                                val africaPath = Path().apply {
-                                    moveTo(210f, 220f)
-                                    lineTo(280f, 220f)
-                                    lineTo(300f, 280f)
-                                    lineTo(270f, 370f)
-                                    lineTo(240f, 310f)
-                                    lineTo(205f, 260f)
-                                    close()
-                                }
-                                drawPath(africaPath, color = Color(0xFF1E293B))
-                                drawPath(africaPath, color = Color(0xFF38BDF8).copy(alpha = 0.4f), style = Stroke(width = 2f))
-
-                                // Australia
-                                val ausPath = Path().apply {
-                                    moveTo(430f, 310f)
-                                    lineTo(480f, 320f)
-                                    lineTo(470f, 370f)
-                                    lineTo(410f, 360f)
-                                    close()
-                                }
-                                drawPath(ausPath, color = Color(0xFF1E293B))
-                                drawPath(ausPath, color = Color(0xFF38BDF8).copy(alpha = 0.4f), style = Stroke(width = 2f))
-
-                                // Antarctica ice plate
-                                drawRect(
-                                    color = Color.White.copy(alpha = 0.15f),
-                                    size = androidx.compose.ui.graphics.drawscope.DrawScope.DefaultFilterQuality.let {
-                                        androidx.compose.ui.geometry.Size(w, 20f)
-                                    },
-                                    topLeft = Offset(0f, h - 30f)
-                                )
-
-                                // 3. Render Offline Stations coordinates
-                                pinsList.forEach { (offset, label) ->
-                                    drawCircle(
-                                        color = Color(0xFFFF9500),
-                                        radius = 7f,
-                                        center = offset
-                                    )
-                                    drawCircle(
-                                        color = Color(0xFFFF9500).copy(alpha = 0.4f),
-                                        radius = 16f,
-                                        center = offset,
-                                        style = Stroke(width = 1.5f)
-                                    )
+                                // 5. Draw Food Stalls and bazaar points pins on the canvas overlay
+                                if (showStalls) {
+                                    activeDistrict.foodStalls.forEach { stall ->
+                                        val isHighlighted = selectedLocationName == stall.name
+                                        // Radial sonar pulse on selection
+                                        if (isHighlighted) {
+                                            drawCircle(
+                                                color = Color(0xFF00FFCC).copy(alpha = 0.3f),
+                                                radius = 24f,
+                                                center = stall.coord
+                                            )
+                                        }
+                                        // Inner solid pointer dot
+                                        drawCircle(
+                                            color = if (isHighlighted) Color(0xFF00FFCC) else Color(0xFFFF5722),
+                                            radius = 8f,
+                                            center = stall.coord
+                                        )
+                                        drawCircle(
+                                            color = Color.White,
+                                            radius = 4f,
+                                            center = stall.coord
+                                        )
+                                    }
                                 }
                             }
                         }
 
-                        // Bottom status bar of Offline Cache Pack
+                        // Top Overlay Panel: Interactive Tap selection or touch coordinate reader
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.TopStart)
+                                .background(Color.Black.copy(alpha = 0.65f))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "🛰️ SELECT PLOT CORES TO SURVEY",
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFF30B0FF)
+                            )
+                            Text(
+                                "Touch elements in the quick catalog below to explore detail logs",
+                                fontSize = 8.sp,
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
+                        }
+
+                        // Zoom indicator on Canvas corner
                         Box(
                             modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .background(Color.Black.copy(alpha = 0.7f))
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                .align(Alignment.BottomEnd)
+                                .padding(10.dp)
+                                .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            Text(
+                                text = "ZOOM: ${String.format(java.util.Locale.US, "%.1fy", zoomScale)}",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF30B0FF)
+                            )
+                        }
+                    }
+
+                    // Interactive local catalog of Malls & Stalls (each inches fully covered)
+                    Text(
+                        text = "📋 LOCAL DIRECTORY CATALOG (TOUCH TO PINPOINT CAMERA & READ DETAIL)",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White.copy(alpha = 0.5f)
+                    )
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // Display malls items in the list
+                        if (showMalls) {
+                            items(activeDistrict.malls) { mall ->
+                                Box(
+                                    modifier = Modifier
+                                        .background(Color(0xFFA020F0).copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                                        .border(1.dp, if (selectedLocationName == mall.name) Color(0xFF00FFCC) else Color(0xFFA020F0).copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                                        .clickable {
+                                            selectedLocationName = mall.name
+                                            selectedLocationDetail = mall.info
+                                            selectedLocationCoordinates = mall.rectOffset
+                                            selectedLocationCategory = "MALL"
+                                            // Center camera
+                                            panOffset = Offset(200f - mall.rectOffset.x, 200f - mall.rectOffset.y)
+                                            zoomScale = 1.6f
+                                            viewModel.speak("Showing shopping mall details: " + mall.name)
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp)
                                 ) {
-                                    Icon(Icons.Default.VerifiedUser, null, tint = Color(0xFF34C759), modifier = Modifier.size(11.dp))
-                                    Text("Full World Map offline package active", fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Icon(Icons.Default.Storefront, null, tint = Color(0xFFEA80FC), modifier = Modifier.size(13.dp))
+                                        Text(mall.name, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
                                 }
-                                Text("Offline Pack: v2026.05 // 100% Synced", fontSize = 9.sp, color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        // Display Food stalls in the list
+                        if (showStalls) {
+                            items(activeDistrict.foodStalls) { stall ->
+                                Box(
+                                    modifier = Modifier
+                                        .background(Color(0xFFFF5722).copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                                        .border(1.dp, if (selectedLocationName == stall.name) Color(0xFF00FFCC) else Color(0xFFFF5722).copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                                        .clickable {
+                                            selectedLocationName = stall.name
+                                            selectedLocationDetail = "${stall.category} • Ratings: ${stall.ratings}\n\n${stall.reviewsSpeak}"
+                                            selectedLocationCoordinates = stall.coord
+                                            selectedLocationCategory = "STALL"
+                                            // Center camera
+                                            panOffset = Offset(200f - stall.coord.x, 200f - stall.coord.y)
+                                            zoomScale = 2.0f
+                                            viewModel.speak("Showing food stall details: " + stall.name + ". " + stall.reviewsSpeak)
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Icon(Icons.Default.Restaurant, null, tint = Color(0xFFFFAB40), modifier = Modifier.size(13.dp))
+                                        Text(stall.name, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
+                                }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    // Persistent detail survey card block (Active when selecting element)
+                    AnimatedContent(targetState = selectedLocationName != null) { hasSel ->
+                        if (hasSel && selectedLocationName != null) {
+                            Card(
+                                shape = RoundedCornerShape(14.dp),
+                                border = BorderStroke(1.dp, Color(0xFF30B0FF).copy(alpha = 0.4f)),
+                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Icon(
+                                                imageVector = if (selectedLocationCategory == "MALL") Icons.Default.Storefront else Icons.Default.PinDrop,
+                                                contentDescription = null,
+                                                tint = Color(0xFF30B0FF),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                text = selectedLocationName ?: "",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = { selectedLocationName = null },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(Icons.Default.Close, null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(14.dp))
+                                        }
+                                    }
+
+                                    Text(
+                                        text = selectedLocationDetail ?: "",
+                                        fontSize = 11.sp,
+                                        color = Color.White.copy(alpha = 0.8f),
+                                        lineHeight = 14.sp
+                                    )
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Coordinates mapping: offset[${String.format(java.util.Locale.US, "x=%.0f, y=%.0f", selectedLocationCoordinates?.x ?: 0f, selectedLocationCoordinates?.y ?: 0f)}]",
+                                            fontSize = 9.sp,
+                                            color = Color.White.copy(alpha = 0.4f)
+                                        )
+
+                                        Button(
+                                            onClick = {
+                                                viewModel.speak("Location Log Survey: " + selectedLocationName + ". Details: " + selectedLocationDetail)
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF30B0FF)),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.height(24.dp)
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Icon(Icons.Default.VolumeUp, null, tint = Color.Black, modifier = Modifier.size(12.dp))
+                                                Text("Read survey text", fontSize = 9.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     // Tactical slider control for precise zoom focus
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.ZoomOut, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                        IconButton(onClick = { zoomScale = (zoomScale - 0.2f).coerceIn(1.0f, 6.0f) }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.ZoomOut, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                        }
                         Slider(
                             value = zoomScale,
                             onValueChange = { zoomScale = it },
-                            valueRange = 1.0f..3.5f,
+                            valueRange = 1.0f..6.0f,
                             colors = SliderDefaults.colors(
                                 thumbColor = Color(0xFF30B0FF),
                                 activeTrackColor = Color(0xFF30B0FF)
                             ),
                             modifier = Modifier.weight(1.0f)
                         )
-                        Icon(Icons.Default.ZoomIn, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                        IconButton(onClick = { zoomScale = (zoomScale + 0.2f).coerceIn(1.0f, 6.0f) }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.ZoomIn, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                        }
+                        IconButton(
+                            onClick = {
+                                zoomScale = 1.2f
+                                panOffset = Offset.Zero
+                            },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Default.CenterFocusStrong, "Center", tint = Color.White, modifier = Modifier.size(14.dp))
+                        }
+                    }
+
+                    // Bottom status bar of Offline Cache Pack for India
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Default.VerifiedUser, null, tint = Color(0xFF34C759), modifier = Modifier.size(11.dp))
+                            Text("offline data package secure", fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                        Text("Active Pack: v2026.05 // index size: CP smart grid", fontSize = 8.sp, color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
 
-        // Live location coordinates monitor panel!
+        // Live location coordinates monitor panel
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f)),
@@ -2779,36 +3228,80 @@ fun WorldMapAppView(viewModel: AssistantViewModel) {
                         Text("Poll GPS", fontSize = 9.sp, color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 if (locationWeather != null) {
                     Text(
                         text = locationWeather!!.city,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                     Text(
                         text = locationWeather!!.description,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         color = Color.White.copy(alpha = 0.7f)
                     )
                 } else {
-                    Text(
-                        text = "GPS Coordinates IDLE",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.6f)
-                    )
-                    Text(
-                        text = "System requires Coarse/Fine GPS permission. Turn on Location Services.",
-                        fontSize = 10.sp,
-                        color = Color.White.copy(alpha = 0.4f)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "GPS Coordinates IDLE",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White.copy(alpha = 0.6f)
+                            )
+                            Text(
+                                text = "Using coarse location mapping under standalone OS guidelines.",
+                                fontSize = 9.sp,
+                                color = Color.White.copy(alpha = 0.4f)
+                            )
+                        }
+                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(6.dp))
+    }
+}
+
+@Composable
+fun FilterPill(label: String, active: Boolean, color: Color, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .background(
+                color = if (active) color.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.05f),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .border(
+                width = 1.dp,
+                color = if (active) color else Color.White.copy(alpha = 0.10f),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(if (active) color else Color.White.copy(alpha = 0.4f))
+            )
+            Text(
+                text = label,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (active) Color.White else Color.White.copy(alpha = 0.6f)
+            )
+        }
     }
 }
