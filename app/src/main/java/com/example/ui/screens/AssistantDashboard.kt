@@ -19,6 +19,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -48,6 +49,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.example.viewmodel.AgentCompanionMode
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -393,6 +397,7 @@ fun KateChatAppView(viewModel: AssistantViewModel) {
     val voiceSpeed by viewModel.voiceSpeed.collectAsStateWithLifecycle()
     val isMuted by viewModel.isVoiceMuted.collectAsStateWithLifecycle()
     val isSpeaking by viewModel.isSpeaking.collectAsStateWithLifecycle()
+    val selectedMode by viewModel.selectedAgentMode.collectAsStateWithLifecycle()
 
     val chatScrollState = rememberLazyListState()
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -419,6 +424,65 @@ fun KateChatAppView(viewModel: AssistantViewModel) {
             onToggleMute = { viewModel.toggleVoiceMuted() },
             onStopVoice = { viewModel.stopSpeaking() }
         )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // AI Companion Agent Selector Row
+        Text(
+            text = "SELECT KATE COMPANION MODE",
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF00FFCC),
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            AgentCompanionMode.values().forEach { mode ->
+                val isSelected = selectedMode == mode
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(
+                            color = if (isSelected) Color(0xFF00FFCC).copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (isSelected) Color(0xFF00FFCC) else Color.White.copy(alpha = 0.10f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .clickable { viewModel.selectAgentMode(mode) }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = mode.label,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSelected) Color(0xFF00FFCC) else Color.White
+                        )
+                        Text(
+                            text = when(mode) {
+                                AgentCompanionMode.COMPANION -> "Daily Assist"
+                                AgentCompanionMode.DEEP_DIVER -> "Deeper Tech"
+                                AgentCompanionMode.RESEARCH -> "Fact Find"
+                                AgentCompanionMode.ANALYST -> "SWOT/Decide"
+                            },
+                            fontSize = 8.sp,
+                            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.5f),
+                            maxLines = 1,
+                            fontWeight = FontWeight.Normal
+                        )
+                    }
+                }
+            }
+        }
 
         // Clear button
         Row(
@@ -936,8 +1000,22 @@ fun IosMessageBubble(
 @Composable
 fun WeatherNewsAppView(viewModel: AssistantViewModel) {
     val weatherData by viewModel.currentWeatherData.collectAsStateWithLifecycle()
+    val gpsWeather by viewModel.locationWeather.collectAsStateWithLifecycle()
     val newsArticles by viewModel.newsFeed.collectAsStateWithLifecycle()
     
+    var isLiveGpsMode by remember { mutableStateOf(false) }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+        onResult = { permissions ->
+            val fineGranted = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] == true
+            val coarseGranted = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] == true
+            if (fineGranted || coarseGranted) {
+                viewModel.updateWeatherWithCurrentLocation()
+            }
+        }
+    )
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -970,13 +1048,19 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
                 }
 
                 IconButton(
-                    onClick = { viewModel.cycleWeather() },
+                    onClick = { 
+                        if (isLiveGpsMode) {
+                            viewModel.updateWeatherWithCurrentLocation()
+                        } else {
+                            viewModel.cycleWeather()
+                        }
+                    },
                     colors = IconButtonDefaults.iconButtonColors(containerColor = Color.White.copy(alpha = 0.12f)),
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
-                        contentDescription = "Switch City Station",
+                        contentDescription = "Switch or Refresh Station",
                         tint = Color(0xFFFF9500),
                         modifier = Modifier.size(18.dp)
                     )
@@ -984,146 +1068,322 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
             }
         }
 
-        // Gorgeous Square/Wide iOS Weather Widget (2x2 representation)
+        // Weather Mode Toggle Switch Segment (Apple-style sleek glass capsule pill)
         item {
-            Card(
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                // Option A: Standard worldmonitor stations
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .weight(1f)
                         .background(
-                            Brush.verticalGradient(
-                                colors = if (weatherData.condition == "Sunny") {
-                                    listOf(Color(0xFF2979FF), Color(0xFF2196F3), Color(0xFF00B0FF))
-                                } else if (weatherData.condition == "Drizzle") {
-                                    listOf(Color(0xFF37474F), Color(0xFF546E7A), Color(0xFF78909C))
-                                } else {
-                                    listOf(Color(0xFF5E35B1), Color(0xFF7E57C2), Color(0xFFB39DDB))
-                                }
-                            )
+                            color = if (!isLiveGpsMode) Color(0xFFFF9500).copy(alpha = 0.2f) else Color.Transparent,
+                            shape = RoundedCornerShape(10.dp)
                         )
-                        .padding(20.dp)
+                        .border(
+                            width = 1.dp,
+                            color = if (!isLiveGpsMode) Color(0xFFFF9500) else Color.Transparent,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .clickable { isLiveGpsMode = false }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top
+                    Text(
+                        text = "WORLD STATIONS",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (!isLiveGpsMode) Color.White else Color.White.copy(alpha = 0.6f)
+                    )
+                }
+
+                // Option B: Google powered GPS location weather
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(
+                            color = if (isLiveGpsMode) Color(0xFFFF9500).copy(alpha = 0.2f) else Color.Transparent,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (isLiveGpsMode) Color(0xFFFF9500) else Color.Transparent,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .clickable { isLiveGpsMode = true }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "LIVE GPS WEATHER",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isLiveGpsMode) Color.White else Color.White.copy(alpha = 0.6f)
+                    )
+                }
+            }
+        }
+
+        // Display Card (Google Permission / State or Standard data)
+        item {
+            if (isLiveGpsMode && gpsWeather == null) {
+                // Stylish Google Request Card
+                Card(
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                    border = BorderStroke(1.dp, Color(0xFFFF9500).copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(Color(0xFF37474F), Color(0xFF263238))
+                                )
+                            )
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(Color.White.copy(alpha = 0.08f)),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Column {
-                                Text(
-                                    text = weatherData.city,
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                                Text(
-                                    text = weatherData.condition,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White.copy(alpha = 0.8f)
-                                )
-                            }
-                            
-                            // Huge climate symbol
-                            Box(
-                                modifier = Modifier
-                                    .size(54.dp)
-                                    .clip(RoundedCornerShape(50))
-                                    .background(Color.White.copy(alpha = 0.2f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = if (weatherData.condition == "Sunny") {
-                                        Icons.Default.WbSunny
-                                    } else if (weatherData.condition == "Drizzle") {
-                                        Icons.Default.CloudQueue
-                                    } else {
-                                        Icons.Default.Cloud
-                                    },
-                                    contentDescription = weatherData.condition,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(32.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.MyLocation,
+                                contentDescription = "Request Location",
+                                tint = Color(0xFFFF9500),
+                                modifier = Modifier.size(28.dp)
+                            )
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Row(
-                            verticalAlignment = Alignment.Bottom,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = weatherData.temperature,
-                                fontSize = 56.sp,
-                                fontWeight = FontWeight.Light,
+                                text = "Satellite Signal Offline",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Black,
                                 color = Color.White
                             )
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Station calibrated\nvia WorldMonitor",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White.copy(alpha = 0.8f),
-                                modifier = Modifier.padding(bottom = 12.dp)
+                                text = "Standby coordinates require device GPS location approval. Click down below to query real-time regional climate stats powered by Google.",
+                                fontSize = 12.sp,
+                                color = Color.White.copy(alpha = 0.7f),
+                                textAlign = TextAlign.Center,
+                                lineHeight = 16.sp
                             )
+                        }
+
+                        Button(
+                            onClick = {
+                                locationPermissionLauncher.launch(
+                                    arrayOf(
+                                        android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                        android.Manifest.permission.ACCESS_COARSE_LOCATION
+                                    )
+                                )
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9500)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("request_gps_weather_button")
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Default.GpsFixed, contentDescription = null, tint = Color.Black)
+                                Text("ACTIVATE GPS & POLL GOOGLE", fontWeight = FontWeight.Bold, color = Color.Black)
+                            }
                         }
 
                         Text(
-                            text = weatherData.description.uppercase(),
-                            fontSize = 11.sp,
+                            text = "POWERED BY GOOGLE CLIMATE MODEL",
+                            fontSize = 8.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color.White.copy(alpha = 0.9f)
+                            color = Color(0xFFFF9500),
+                            letterSpacing = 1.sp
                         )
+                    }
+                }
+            } else {
+                // Active Weather Card (Bind to world data or polled gpsWeather)
+                val activeWeather = if (isLiveGpsMode && gpsWeather != null) gpsWeather!! else weatherData
+                
+                Card(
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = if (activeWeather.condition == "Sunny") {
+                                        listOf(Color(0xFF2979FF), Color(0xFF2196F3), Color(0xFF00B0FF))
+                                    } else if (activeWeather.condition == "Drizzle") {
+                                        listOf(Color(0xFF37474F), Color(0xFF546E7A), Color(0xFF78909C))
+                                    } else {
+                                        listOf(Color(0xFF5E35B1), Color(0xFF7E57C2), Color(0xFFB39DDB))
+                                    }
+                                )
+                            )
+                            .padding(20.dp)
+                    ) {
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = activeWeather.city,
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = activeWeather.condition,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White.copy(alpha = 0.8f)
+                                    )
+                                }
+                                
+                                Spacer(modifier = Modifier.width(8.dp))
 
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(Color.White.copy(alpha = 0.2f))
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // Atmosphere specs
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            IosWeatherSpecElement(label = "HUMIDITY", value = weatherData.humidity)
-                            IosWeatherSpecElement(label = "WIND SPEED", value = weatherData.wind)
-                            IosWeatherSpecElement(label = "UV INDEX", value = weatherData.uvIndex)
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Compact Forecast list
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            weatherData.forecast.forEach { f ->
-                                Row(
+                                // Huge climate symbol
+                                Box(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .size(54.dp)
+                                        .clip(RoundedCornerShape(50))
+                                        .background(Color.White.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Text(f.day, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Icon(
+                                        imageVector = if (activeWeather.condition == "Sunny") {
+                                            Icons.Default.WbSunny
+                                        } else if (activeWeather.condition == "Drizzle") {
+                                            Icons.Default.CloudQueue
+                                        } else {
+                                            Icons.Default.Cloud
+                                        },
+                                        contentDescription = activeWeather.condition,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Row(
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    text = activeWeather.temperature,
+                                    fontSize = 56.sp,
+                                    fontWeight = FontWeight.Light,
+                                    color = Color.White
+                                )
+                                Column(modifier = Modifier.padding(bottom = 12.dp)) {
+                                    Text(
+                                        text = if (isLiveGpsMode) "Station localized\nvia Google Satellite" else "Station calibrated\nvia WorldMonitor",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White.copy(alpha = 0.8f)
+                                    )
+                                }
+                            }
+
+                            Text(
+                                text = activeWeather.description.uppercase(),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White.copy(alpha = 0.9f)
+                            )
+
+                            if (isLiveGpsMode) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier
+                                        .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .clip(RoundedCornerShape(50))
+                                            .background(Color(0xFF00FFCC))
+                                    )
+                                    Text(
+                                        text = "POWERED BY GOOGLE CLIMATE MODEL",
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = Color(0xFF00FFCC)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(Color.White.copy(alpha = 0.2f))
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Atmosphere specs
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                IosWeatherSpecElement(label = "HUMIDITY", value = activeWeather.humidity)
+                                IosWeatherSpecElement(label = "WIND SPEED", value = activeWeather.wind)
+                                IosWeatherSpecElement(label = "UV INDEX", value = activeWeather.uvIndex)
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Compact Forecast list
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                activeWeather.forecast.forEach { f ->
                                     Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(
-                                            imageVector = if (f.condition == "Sunny") Icons.Default.WbSunny else Icons.Default.Cloud,
-                                            contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Text(f.temp, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                                        Text(f.day, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (f.condition == "Sunny") Icons.Default.WbSunny else Icons.Default.Cloud,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(f.temp, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                                        }
                                     }
                                 }
                             }
