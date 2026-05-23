@@ -1104,16 +1104,16 @@ data class YouTubeChannel(
 )
 
 val newsChannelsList = listOf(
-    YouTubeChannel("Aaj Tak Live", "UCYPvAwZP8pZhSMW8qs7cVCw", "AT", "🔴 LIVE", "Hindi"),
-    YouTubeChannel("NDTV 24x7", "UCXBD5iG5cr4ZYZ99K-fmDHg", "ND", "🔴 LIVE", "English"),
-    YouTubeChannel("BBC News World", "UCCj956IF62FbT7Gouszaj9w", "BB", "🔴 LIVE", "English"),
-    YouTubeChannel("Al Jazeera Global", "UCfiwzLy-8yKzIbsmZTzxDgw", "AJ", "🔴 LIVE", "English"),
-    YouTubeChannel("Sky News UK", "UCkFclpi8U9VJjfxLYoms7Aw", "SK", "🔴 LIVE", "English"),
-    YouTubeChannel("France 24", "UCCCPCZNChQdGa9EkATeye4g", "FR", "🔴 LIVE", "English"),
-    YouTubeChannel("DW News", "UCbbS1GE942k3UVqpLklyhIA", "DW", "🔴 LIVE", "English"),
-    YouTubeChannel("TRT World", "UCnyCrv8b7bu0oWFXGyHaPzg", "TR", "🔴 LIVE", "English"),
-    YouTubeChannel("NBC News Live", "UChDKyKQ59fYz3JO2fl0Z6sg", "NB", "🔴 LIVE", "English"),
-    YouTubeChannel("Republic Bharat", "UCilbgr035NJ7BIkVPMeLyWA", "RB", "🔴 LIVE", "Hindi")
+    YouTubeChannel("Lofi Girl", "jfKfPfyJRdk", "LG", "🔴 LIVE", "Music"),
+    YouTubeChannel("DW News", "V9KzY83_N64", "DW", "🔴 LIVE", "English"),
+    YouTubeChannel("Sky News UK", "9Auq9mYxFEE", "SK", "🔴 LIVE", "English"),
+    YouTubeChannel("France 24", "sPJeEG23lO8", "FR", "🔴 LIVE", "English"),
+    YouTubeChannel("ABC News AUS", "W1ilCyKVy5E", "AB", "🔴 LIVE", "English"),
+    YouTubeChannel("NASA Live", "21X5lGlDOfg", "NA", "🔴 LIVE", "English"),
+    YouTubeChannel("Bloomberg", "dp8PhLsUcFE", "BL", "🔴 LIVE", "English"),
+    YouTubeChannel("CNN News18", "8_mB8n-v08g", "CN", "🔴 LIVE", "English"),
+    YouTubeChannel("Aaj Tak Live", "NqbF6Wlh-fQ", "AT", "🔴 LIVE", "Hindi"),
+    YouTubeChannel("Republic Bharat", "yGvAmg9fMzo", "RB", "🔴 LIVE", "Hindi")
 )
 
 @Composable
@@ -1398,12 +1398,12 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
                                     domStorageEnabled = true
                                     mediaPlaybackRequiresUserGesture = false
                                 }
-                                val videoHtml = "<!DOCTYPE html><html><body style='margin:0;padding:0;background-color:#000;'><iframe width='100%' height='100%' src='https://www.youtube.com/embed/live_stream?channel=${activeChannel.id}&autoplay=1&mute=1&playsinline=1' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe></body></html>"
+                                val videoHtml = "<!DOCTYPE html><html><body style='margin:0;padding:0;background-color:#000;'><iframe width='100%' height='100%' src='https://www.youtube.com/embed/${activeChannel.id}?autoplay=1&mute=1&playsinline=1' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe></body></html>"
                                 loadDataWithBaseURL("https://www.youtube.com", videoHtml, "text/html", "UTF-8", null)
                             }
                         },
                         update = { webView ->
-                            val videoHtml = "<!DOCTYPE html><html><body style='margin:0;padding:0;background-color:#000;'><iframe width='100%' height='100%' src='https://www.youtube.com/embed/live_stream?channel=${activeChannel.id}&autoplay=1&mute=1&playsinline=1' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe></body></html>"
+                            val videoHtml = "<!DOCTYPE html><html><body style='margin:0;padding:0;background-color:#000;'><iframe width='100%' height='100%' src='https://www.youtube.com/embed/${activeChannel.id}?autoplay=1&mute=1&playsinline=1' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe></body></html>"
                             webView.loadDataWithBaseURL("https://www.youtube.com", videoHtml, "text/html", "UTF-8", null)
                         },
                         modifier = Modifier.fillMaxSize()
