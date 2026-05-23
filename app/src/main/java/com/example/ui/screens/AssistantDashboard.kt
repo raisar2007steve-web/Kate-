@@ -991,11 +991,37 @@ fun IosMessageBubble(
                         color = if (isUser) Color.White.copy(alpha = 0.8f) else Color(0xFF00F0FF)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = message.text,
-                        fontSize = 13.sp,
-                        color = Color.White
-                    )
+                    if (!isUser && message.text.contains("###")) {
+                        val sections = message.text.split("###").filter { it.isNotBlank() }
+                        sections.forEach { section ->
+                            val lines = section.trim().lines()
+                            if (lines.isNotEmpty()) {
+                                val header = lines.first().trim()
+                                val content = lines.drop(1).joinToString("\n").trim()
+                                if (header.isNotEmpty() || content.isNotEmpty()) {
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                    ) {
+                                        Column(modifier = Modifier.padding(8.dp)) {
+                                            if (header.isNotEmpty()) {
+                                                Text(text = header.replace("*", "").uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF00F0FF))
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                            }
+                                            Text(text = content, fontSize = 13.sp, color = Color.White.copy(alpha = 0.9f))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = message.text,
+                            fontSize = 13.sp,
+                            color = Color.White
+                        )
+                    }
 
                     if (!isUser) {
                         Spacer(modifier = Modifier.height(8.dp))
@@ -1356,6 +1382,8 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
                     AndroidView(
                         factory = { ctx ->
                             WebView(ctx).apply {
+                                setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+                                webChromeClient = android.webkit.WebChromeClient()
                                 webViewClient = object : WebViewClient() {
                                     override fun onReceivedError(
                                         view: WebView?,
@@ -1370,11 +1398,13 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
                                     domStorageEnabled = true
                                     mediaPlaybackRequiresUserGesture = false
                                 }
-                                loadUrl("https://www.youtube.com/embed/live_stream?channel=${activeChannel.id}&autoplay=1&mute=1&playsinline=1")
+                                val videoHtml = "<!DOCTYPE html><html><body style='margin:0;padding:0;background-color:#000;'><iframe width='100%' height='100%' src='https://www.youtube.com/embed/live_stream?channel=${activeChannel.id}&autoplay=1&mute=1&playsinline=1' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe></body></html>"
+                                loadDataWithBaseURL("https://www.youtube.com", videoHtml, "text/html", "UTF-8", null)
                             }
                         },
                         update = { webView ->
-                            webView.loadUrl("https://www.youtube.com/embed/live_stream?channel=${activeChannel.id}&autoplay=1&mute=1&playsinline=1")
+                            val videoHtml = "<!DOCTYPE html><html><body style='margin:0;padding:0;background-color:#000;'><iframe width='100%' height='100%' src='https://www.youtube.com/embed/live_stream?channel=${activeChannel.id}&autoplay=1&mute=1&playsinline=1' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe></body></html>"
+                            webView.loadDataWithBaseURL("https://www.youtube.com", videoHtml, "text/html", "UTF-8", null)
                         },
                         modifier = Modifier.fillMaxSize()
                     )

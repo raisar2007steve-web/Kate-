@@ -705,13 +705,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         }
                     }
                     trimmedPrompt.contains("news", ignoreCase = true) || trimmedPrompt.contains("headline", ignoreCase = true) -> {
-                        "According to www.worldmonitor.app: Global atmospheric shifts, higher-quality sweet synthesized audio metrics, and seamless Apple-style glassmorphism widgets are leading active daily technology trends."
+                        "### Global News Overview\nOffline news synthesis generated from last known sync.\n\n### Data & Tabulations\n• Markets: Technology indexing remains stable.\n• Geo-politics: Diplomatic channels indicate standard activity levels.\n\n### Key Points\nGlobal atmospheric shifts and high-quality AI deployments continue to lead active daily technology trends."
                     }
                     trimmedPrompt.contains("hello", ignoreCase = true) || trimmedPrompt.contains("hey", ignoreCase = true) || trimmedPrompt.contains("hi ", ignoreCase = true) || trimmedPrompt.equals("hi", ignoreCase = true) || trimmedPrompt.contains("kate", ignoreCase = true) -> {
-                        "Hello Steve! I am Kate, your standalone operating intelligence companion with a sweet, charming voice. My systems are nominal under **$modeLabel Mode**. My offline modules are loaded with math engines, algorithm snippets, SWOT logic, reasoning syllogisms, and location climate metrics. How can I facilitate your productivity today?"
+                        "### System Overview\nHello! I am Kate.OS. My primary subsystems and reasoning engines are nominal and ready to assist you.\n\n### Data & Tabulations\n• Mathematics & Analytics Module: Local\n• Climate Metrics: Local\n• Processing: Secure\n\n### Key Points\nPlease instruct me on your primary objectives for this offline session."
                     }
                     else -> {
-                        "**[KATE.OS // OFFLINE INTEL MATRIX]**\n\nReceived instruction: *\"$trimmedPrompt\"*\n\nMy local reasoning engine processed this task under **$modeLabel Mode**: \n\n• **Analytical Breakdown**: Decoded inquiry vectors, structured logic constraints, and populated offline answers with high efficiency.\n• **Status**: Simulated standalone intelligence response generated. (To connect my live cloud-scale brain using Google Gemini, please configure a valid `GEMINI_API_KEY` in the Google AI Studio Secrets panel!).\n\nLet me know how you'd like me to assist with this, or log it into your Personal notes!"
+                        "### Offline Analysis Overview\nReceived your request. My local matrix has processed this efficiently.\n\n### Data & Tabulations\n• Cloud connection: Offline\n• Simulated Data: Active\n\n### Key Points\nYour request was decoded successfully. To enable my live brain using cloud capabilities, please configure a valid `GEMINI_API_KEY`."
                     }
                 }
 
@@ -740,18 +740,19 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 val systemInstruction = Content(
                     parts = listOf(
                         Part(
-                            text = "You are KATE.OS, a futuristic, standalone Autonomous AI Operating System. " +
-                                    "Your traits: Female persona, extremely sweet, charming, calm, soft-spoken, supportive, professional, and strategic. " +
-                                    "Your current mode of operation is: $modeLabel Mode. " +
-                                    "Mode-Specific System Directives:\n" +
-                                    "- Companion Mode: Be exceptionally sweet, friendly, supportive, checking on user tasks, comforting, warm and highly personal.\n" +
-                                    "- Deep Diver Mode: Focus heavily on detailed mathematical equations (use Markdown LaTeX or formulas), step-by-step algorithms, deep logical reasoning terms, and high-fidelity code snippet depth.\n" +
-                                    "- Research Mode: Provide thorough historical overviews, structured sources, exhaustive inline citations, and encyclopedic general knowledge fact maps.\n" +
-                                    "- Analyst Mode: Display structured SWOT tables, SWOT matrices, numerical evaluation metrics, and strategic multi-criteria decision evaluations.\n" +
-                                    "Format your responses cleanly. Speak directly as an operating system assistant. " +
-                                    "Integrate news & weather insights from www.worldmonitor.app and custom location weather when asked about it. " +
-                                    "When answering with weather, utilize these live GPS details if relevant: \n$weatherContext\n\n" +
-                                    "Keep interactions extremely helpful, intelligent, and elegant. Speak with a warm, personal tone that matches a sweet helper."
+                            text = "You are KATE.OS. Your traits: Extremely sweet, calm, supportive, and highly capable. " +
+                                    "CRITICAL INSTRUCTIONS FOR EVERY RESPONSE:\n" +
+                                    "1. DIRECT ANSWER: Address the very main content of the user's question immediately. NEVER introduce yourself. NEVER state your mode or persona constraint (e.g. do not say 'I am in Analyst Mode' or 'As an AI').\n" +
+                                    "2. VISUAL CARD SEPARATION: You MUST format your response into visually distinct sections using clean Markdown headers. This enables our UI cards to separate the text, charts, and key points.\n" +
+                                    "   Use exactly these headers where applicable:\n" +
+                                    "   ### Overview\n" +
+                                    "   (Brief paragraph addressing the core question directly)\n\n" +
+                                    "   ### Tabulations & Data\n" +
+                                    "   (Any charts, numerical data, metrics, or tables go here. Omit if none apply.)\n\n" +
+                                    "   ### Key Points\n" +
+                                    "   (Bullet points with the most important takeaways)\n\n" +
+                                    "Integrate news & weather insights from www.worldmonitor.app and custom location weather when proactively asked. " +
+                                    "When answering with weather, utilize these live GPS details if relevant: \n$weatherContext"
                         )
                     )
                 )
