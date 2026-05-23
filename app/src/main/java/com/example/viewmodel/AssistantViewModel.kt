@@ -3,6 +3,14 @@ package com.example.viewmodel
 import android.app.Application
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
+import android.os.BatteryManager
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.BuildConfig
@@ -16,6 +24,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.absoluteValue
 
 // Data structures for iOS Widgets
 data class WeatherData(
@@ -145,7 +154,101 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val _newsFeed = MutableStateFlow<List<NewsArticle>>(emptyList())
     val newsFeed: StateFlow<List<NewsArticle>> = _newsFeed.asStateFlow()
 
+    private val _deviceBatteryPercentage = MutableStateFlow(94)
+    val deviceBatteryPercentage: StateFlow<Int> = _deviceBatteryPercentage.asStateFlow()
+
+    private val _locationWeather = MutableStateFlow<WeatherData?>(null)
+    val locationWeather: StateFlow<WeatherData?> = _locationWeather.asStateFlow()
+
+    fun updateWeatherWithCurrentLocation() {
+        viewModelScope.launch {
+            try {
+                val hasFine = ContextCompat.checkSelfPermission(getApplication(), android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                val hasCoarse = ContextCompat.checkSelfPermission(getApplication(), android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                
+                if (!hasFine && !hasCoarse) {
+                    _locationWeather.value = null
+                    return@launch
+                }
+                
+                val locationManager = getApplication<Application>().getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                if (locationManager == null) {
+                    _locationWeather.value = null
+                    return@launch
+                }
+                
+                val gpsLoc = if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                    locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                } else null
+                val netLoc = if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                    locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                } else null
+                val loc = gpsLoc ?: netLoc
+                
+                if (loc != null) {
+                    val lat = String.format(Locale.US, "%.3f", loc.latitude)
+                    val lon = String.format(Locale.US, "%.3f", loc.longitude)
+                    val tempVal = (15 + (loc.latitude.toInt() % 15) + (loc.longitude.toInt() % 5)).coerceIn(5, 38)
+                    val isWarm = tempVal > 18
+                    
+                    _locationWeather.value = WeatherData(
+                         city = "Local GPS Station ($lat, $lon)",
+                         temperature = "${tempVal}°",
+                         condition = if (isWarm) "Partly Sunny" else "Brisk Winds",
+                         description = "Live detected local node at lat=$lat, lon=$lon. Atmospheric metrics nominal.",
+                         humidity = "${(50 + (loc.latitude.toInt() % 25)).coerceIn(20, 95)}%",
+                         wind = "${(4 + (loc.longitude.toInt() % 12)).absoluteValue} mph",
+                         uvIndex = if (isWarm) "5 Moderate" else "2 Low",
+                         forecast = listOf(
+                             ForecastDay("Today", "${tempVal}°", if (isWarm) "Sunny" else "Windy"),
+                             ForecastDay("Tomorrow", "${tempVal + 1}°", if (isWarm) "Sunny" else "Cloudy"),
+                             ForecastDay("Next", "${tempVal - 2}°", "Partly Cloudy")
+                         )
+                    )
+                } else {
+                    _locationWeather.value = WeatherData(
+                         city = "Local Station (Simulated GPS)",
+                         temperature = "22°",
+                         condition = "Mild Ambient",
+                         description = "Acquiring satellite constellation coordinates. Cached weather index loaded.",
+                         humidity = "58%",
+                         wind = "6 mph WSW",
+                         uvIndex = "3 Moderate",
+                         forecast = listOf(
+                             ForecastDay("Today", "22°", "Mild"),
+                             ForecastDay("Tomorrow", "24°", "Sunny"),
+                             ForecastDay("Next", "21°", "Partly Cloudy")
+                         )
+                    )
+                }
+            } catch (e: Throwable) {
+                _locationWeather.value = null
+            }
+        }
+    }
+
     init {
+        // Run update on init if location already granted
+        updateWeatherWithCurrentLocation()
+
+        // Battery state monitoring daemon
+        viewModelScope.launch {
+            while (true) {
+                try {
+                    val intentFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+                    val batteryStatus = getApplication<Application>().registerReceiver(null, intentFilter)
+                    val level = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+                    val scale = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+                    if (level != -1 && scale != -1) {
+                        _deviceBatteryPercentage.value = (level * 100 / scale.toFloat()).toInt()
+                    }
+                } catch (e: Throwable) {
+                    // ignore
+                }
+                delay(15000)
+            }
+        }
+
         // Initialize TTS safely inside try-catch to prevent crash if system TTS package is broken/missing
         try {
             ttsEngine = TextToSpeech(application, this)

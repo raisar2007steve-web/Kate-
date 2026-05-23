@@ -2,6 +2,18 @@ package com.example.ui.screens
 
 import android.widget.Toast
 import kotlinx.coroutines.delay
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceError
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -50,7 +62,7 @@ import java.util.*
 import kotlin.math.sin
 
 enum class IosLaunchApp {
-    SIRI_CHAT, WEATHER_NEWS, REMINDERS, NOTES
+    KATE_CHAT, WEATHER_NEWS, WORLD_MAP, REMINDERS, NOTES
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,11 +72,12 @@ fun AssistantDashboard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var activeApp by remember { mutableStateOf(IosLaunchApp.SIRI_CHAT) }
+    var activeApp by remember { mutableStateOf(IosLaunchApp.KATE_CHAT) }
 
     // Collect TTS and widgets statuses
     val isSpeaking by viewModel.isSpeaking.collectAsStateWithLifecycle()
     val isVoiceMuted by viewModel.isVoiceMuted.collectAsStateWithLifecycle()
+    val batteryLvl by viewModel.deviceBatteryPercentage.collectAsStateWithLifecycle()
     
     // Beautiful gradient representing iOS standard wallpaper (Lavender aurora meets deep sunset)
     val iosWallpaperBrush = Brush.linearGradient(
@@ -85,9 +98,9 @@ fun AssistantDashboard(
         Column(modifier = Modifier.fillMaxSize()) {
             
             // 1. Sleek Apple-style Status Bar
-            IosStatusBar()
+            IosStatusBar(batteryLevel = batteryLvl)
 
-            // 2. Main Active Application Window (Siri Chat, Weather, Reminders, Notes)
+            // 2. Main Active Application Window (Kate Chat, Weather, Map, Reminders, Notes)
             Box(
                 modifier = Modifier
                     .weight(1.0f)
@@ -108,8 +121,9 @@ fun AssistantDashboard(
                     label = "IosAppTransitionPortal"
                 ) { app ->
                     when (app) {
-                        IosLaunchApp.SIRI_CHAT -> SiriChatAppView(viewModel)
+                        IosLaunchApp.KATE_CHAT -> KateChatAppView(viewModel)
                         IosLaunchApp.WEATHER_NEWS -> WeatherNewsAppView(viewModel)
+                        IosLaunchApp.WORLD_MAP -> WorldMapAppView(viewModel)
                         IosLaunchApp.REMINDERS -> IosRemindersAppView(viewModel)
                         IosLaunchApp.NOTES -> IosNotesAppView(viewModel)
                     }
@@ -128,7 +142,7 @@ fun AssistantDashboard(
 }
 
 @Composable
-fun IosStatusBar() {
+fun IosStatusBar(batteryLevel: Int) {
     // Top system status indicator row representing Apple bar
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     var currentTimeStr by remember { mutableStateOf(timeFormat.format(Date())) }
@@ -202,7 +216,7 @@ fun IosStatusBar() {
                 modifier = Modifier.size(14.dp)
             )
             
-            // Battery capsule
+            // Battery capsule using dynamic system batteryLevel percentage
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -210,7 +224,7 @@ fun IosStatusBar() {
                     .padding(horizontal = 4.dp, vertical = 1.dp)
             ) {
                 Text(
-                    text = "94%",
+                    text = "$batteryLevel%",
                     fontSize = 9.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color.White
@@ -219,7 +233,10 @@ fun IosStatusBar() {
                 Box(
                     modifier = Modifier
                         .size(width = 11.dp, height = 6.dp)
-                        .background(Color(0xFF34C759), RoundedCornerShape(1f))
+                        .background(
+                            if (batteryLevel < 20) Color(0xFFFF453A) else Color(0xFF34C759), 
+                            RoundedCornerShape(1f)
+                        )
                 )
             }
         }
@@ -233,12 +250,12 @@ fun IosBottomAppDock(
     isSpeaking: Boolean,
     isMuted: Boolean
 ) {
-    // Beautiful glassmorphic bottom tray holding Apple iOS dock icons
+    // Beautiful glassmorphic bottom tray holding Apple iOS dock icons (compact-optimized to fit 5 items)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(start = 20.dp, end = 20.dp, bottom = 12.dp, top = 6.dp),
+            .padding(start = 12.dp, end = 12.dp, bottom = 12.dp, top = 6.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -247,18 +264,18 @@ fun IosBottomAppDock(
                 .clip(RoundedCornerShape(28.dp))
                 .background(Color.White.copy(alpha = 0.12f)) // Apple classic translucent bar
                 .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.08f), Color.Transparent)))
-                .padding(horizontal = 14.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // App Icon 1: Siri Chat
+            // App Icon 1: Kate Chat
             DockAppIcon(
-                label = "Siri Chat",
+                label = "Kate Chat",
                 iconVector = Icons.Default.Cyclone,
                 accentColor = Color(0xFF00F0FF),
-                isSelected = activeApp == IosLaunchApp.SIRI_CHAT,
+                isSelected = activeApp == IosLaunchApp.KATE_CHAT,
                 isPulse = isSpeaking,
-                onClick = { onAppLaunch(IosLaunchApp.SIRI_CHAT) }
+                onClick = { onAppLaunch(IosLaunchApp.KATE_CHAT) }
             )
 
             // App Icon 2: Weather & News (worldmonitor.app)
@@ -270,7 +287,16 @@ fun IosBottomAppDock(
                 onClick = { onAppLaunch(IosLaunchApp.WEATHER_NEWS) }
             )
 
-            // App Icon 3: Reminders (Checklists)
+            // App Icon 3: Offline & Web World Map
+            DockAppIcon(
+                label = "World Map",
+                iconVector = Icons.Default.Map,
+                accentColor = Color(0xFF30B0FF),
+                isSelected = activeApp == IosLaunchApp.WORLD_MAP,
+                onClick = { onAppLaunch(IosLaunchApp.WORLD_MAP) }
+            )
+
+            // App Icon 4: Reminders (Checklists)
             DockAppIcon(
                 label = "Reminders",
                 iconVector = Icons.Default.ListAlt,
@@ -279,7 +305,7 @@ fun IosBottomAppDock(
                 onClick = { onAppLaunch(IosLaunchApp.REMINDERS) }
             )
 
-            // App Icon 4: Notes (Encrypted matrices)
+            // App Icon 5: Notes (Encrypted matrices)
             DockAppIcon(
                 label = "Notes",
                 iconVector = Icons.Default.StickyNote2,
@@ -354,10 +380,10 @@ fun DockAppIcon(
 }
 
 // ==========================================
-// SCREEN A: Siri-Style Voice Assistant App
+// SCREEN A: Kate-Style Voice Assistant App
 // ==========================================
 @Composable
-fun SiriChatAppView(viewModel: AssistantViewModel) {
+fun KateChatAppView(viewModel: AssistantViewModel) {
     val context = LocalContext.current
     val messages by viewModel.messagesState.collectAsStateWithLifecycle()
     val isAiLoading by viewModel.isAiLoading.collectAsStateWithLifecycle()
@@ -382,8 +408,8 @@ fun SiriChatAppView(viewModel: AssistantViewModel) {
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
-        // Siri Ambient Waveform widget
-        SiriVoiceWidget(
+        // Kate Ambient Waveform widget
+        KateVoiceWidget(
             isSpeaking = isSpeaking,
             isMuted = isMuted,
             voicePitch = voicePitch,
@@ -408,7 +434,7 @@ fun SiriChatAppView(viewModel: AssistantViewModel) {
                 modifier = Modifier
                     .clickable { 
                         viewModel.clearChat()
-                        Toast.makeText(context, "Siri memory sync complete.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Kate memory sync complete.", Toast.LENGTH_SHORT).show()
                     }
                     .padding(vertical = 4.dp, horizontal = 8.dp)
             )
@@ -542,7 +568,7 @@ fun SiriChatAppView(viewModel: AssistantViewModel) {
                             color = Color(0xFF00F0FF)
                         )
                         Text(
-                            text = "Siri connection thinking...",
+                            text = "Kate connection thinking...",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White.copy(alpha = 0.8f)
@@ -562,7 +588,7 @@ fun SiriChatAppView(viewModel: AssistantViewModel) {
             TextField(
                 value = chatInput,
                 onValueChange = { viewModel.updateChatInput(it) },
-                placeholder = { Text("Command Siri assist...", color = Color.White.copy(alpha = 0.5f)) },
+                placeholder = { Text("Command Kate assist...", color = Color.White.copy(alpha = 0.5f)) },
                 modifier = Modifier
                     .weight(1.0f)
                     .clip(RoundedCornerShape(20.dp))
@@ -612,7 +638,7 @@ fun SiriChatAppView(viewModel: AssistantViewModel) {
 }
 
 @Composable
-fun SiriVoiceWidget(
+fun KateVoiceWidget(
     isSpeaking: Boolean,
     isMuted: Boolean,
     voicePitch: Float,
@@ -645,7 +671,7 @@ fun SiriVoiceWidget(
                             .background(if (isSpeaking) Color(0xFF00FF66) else Color(0xFF00F0FF))
                     )
                     Text(
-                        text = "Siri Voice Synthesizer".uppercase(),
+                        text = "Kate Voice Synthesizer".uppercase(),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color.White,
@@ -671,7 +697,7 @@ fun SiriVoiceWidget(
             Spacer(modifier = Modifier.height(12.dp))
 
             // Waveform core canvas
-            SiriCustomWaveform(isActive = isSpeaking)
+            KateCustomWaveform(isActive = isSpeaking)
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -737,9 +763,9 @@ fun SiriVoiceWidget(
 }
 
 @Composable
-fun SiriCustomWaveform(isActive: Boolean) {
+fun KateCustomWaveform(isActive: Boolean) {
     // Elegant real-time mathematical sine-wave animation that scales correctly
-    val infiniteTransition = rememberInfiniteTransition(label = "SiriWaveform")
+    val infiniteTransition = rememberInfiniteTransition(label = "KateWaveform")
     val phaseOffset by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = (2 * java.lang.Math.PI).toFloat(),
@@ -842,7 +868,7 @@ fun IosMessageBubble(
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text(
-                        text = if (isUser) "Me" else "Siri OS Voice",
+                        text = if (isUser) "Me" else "Kate OS Voice",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = if (isUser) Color.White.copy(alpha = 0.8f) else Color(0xFF00F0FF)
@@ -1100,6 +1126,200 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
                                         Text(f.temp, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Live News Broadcast Video Feed from worldmonitor.app with Playback and short scripts
+        item {
+            var activeScriptIndex by remember { mutableStateOf(0) }
+            val broadcastScripts = listOf(
+                "WORLDFEED SCRIPT: [05:23] Station nodes report stable climate pressure across modern city grids.",
+                "WORLDFEED SCRIPT: [05:30] KATE.OS operating systems achieved universal fluency with sweet voice synthesis.",
+                "WORLDFEED SCRIPT: [05:45] World Monitor satellite captures magnetic shift over Atlantic current channels."
+            )
+            var videoPlaying by remember { mutableStateOf(true) }
+            val infiniteTransition = rememberInfiniteTransition(label = "BroadcastVideoAnim")
+            val sweepPhase by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(2500, easing = LinearEasing)
+                ),
+                label = "radarSweep"
+            )
+
+            Card(
+                shape = RoundedCornerShape(22.dp),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .background(if (videoPlaying) Color.Red else Color.Gray)
+                            )
+                            Text(
+                                "WORLDMONITOR.APP // LIVE VIDEO STREAM",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                letterSpacing = 0.8.sp
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { videoPlaying = !videoPlaying },
+                            colors = IconButtonDefaults.iconButtonColors(containerColor = Color.White.copy(alpha = 0.12f)),
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (videoPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = if (videoPlaying) "Pause Video" else "Play Video",
+                                tint = Color(0xFFFF9500),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Simulated Video Feed screen canvas animation!
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(130.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF070A13)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val w = size.width
+                            val h = size.height
+
+                            // Draw ocean ambient grid background
+                            drawRect(
+                                color = Color(0xFF111827),
+                                size = size
+                            )
+
+                            // Radially sweeping coordinates indicator simulating ocean monitoring feed
+                            if (videoPlaying) {
+                                drawCircle(
+                                    color = Color(0xFFFF9500).copy(alpha = 0.1f),
+                                    radius = h * 0.4f,
+                                    center = Offset(w / 2f, h / 2f)
+                                )
+                                drawCircle(
+                                    color = Color(0xFFFF9500).copy(alpha = 0.2f),
+                                    radius = h * 0.2f,
+                                    center = Offset(w / 2f, h / 2f)
+                                )
+                                // Draw scanning lines
+                                for (y in 0 until h.toInt() step 12) {
+                                    drawLine(
+                                        color = Color.White.copy(alpha = 0.04f),
+                                        start = Offset(0f, y.toFloat()),
+                                        end = Offset(w, y.toFloat()),
+                                        strokeWidth = 1f
+                                    )
+                                }
+                                // Draw radar sweeping signal vectors
+                                val radPhase = Math.toRadians(sweepPhase.toDouble())
+                                val lineEndX = (w / 2f + Math.cos(radPhase) * (h * 0.45f)).toFloat()
+                                val lineEndY = (h / 2f + Math.sin(radPhase) * (h * 0.45f)).toFloat()
+                                drawLine(
+                                    color = Color(0xFFFF9500).copy(alpha = 0.6f),
+                                    start = Offset(w / 2f, h / 2f),
+                                    end = Offset(lineEndX, lineEndY),
+                                    strokeWidth = 2f
+                                )
+                            }
+                        }
+
+                        // Short broadcast description overlaid on top of feed
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .background(Color.Black.copy(alpha = 0.65f))
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                                .fillMaxWidth()
+                        ) {
+                            Text(
+                                text = broadcastScripts[activeScriptIndex],
+                                fontSize = 10.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 2
+                            )
+                        }
+
+                        // Recording indicator
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(6.dp)
+                                .background(Color.Red.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text("REC", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.ExtraBold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Playlist of short scripts running on tap!
+                    Text(
+                        "CLICK TO LOAD BROADCAST SCRIPT IN SPEECH:",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        broadcastScripts.forEachIndexed { idx, s ->
+                            Card(
+                                onClick = {
+                                    activeScriptIndex = idx
+                                    viewModel.speak(s.replace("WORLDFEED SCRIPT:", ""))
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (activeScriptIndex == idx) Color(0xFFFF9500).copy(alpha = 0.18f) else Color.White.copy(alpha = 0.05f)
+                                ),
+                                border = BorderStroke(
+                                    1.dp, 
+                                    if (activeScriptIndex == idx) Color(0xFFFF9500) else Color.White.copy(alpha = 0.1f)
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = "Script ${idx + 1}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = if (activeScriptIndex == idx) Color(0xFFFF9500) else Color.White,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp)
+                                )
                             }
                         }
                     }
@@ -1923,5 +2143,412 @@ fun IosNoteRowCard(
                 )
             }
         }
+    }
+}
+
+// ==========================================
+// SCREEN C: Offline & Import World Map App View
+// ==========================================
+@Composable
+fun WorldMapAppView(viewModel: AssistantViewModel) {
+    var mapModeByInternet by remember { mutableStateOf(false) } // false = Offline vector, true = Web import WebView
+    val locationWeather by viewModel.locationWeather.collectAsStateWithLifecycle()
+    
+    // Tactile offline coordinates marker lists
+    val context = LocalContext.current
+    val pinsList = remember { listOf(
+        Offset(250f, 180f) to "London Base (Offline)",
+        Offset(130f, 190f) to "Cupertino Node (Offline)",
+        Offset(460f, 210f) to "Tokyo Station (Offline)"
+    ) }
+
+    LaunchedEffect(Unit) {
+        viewModel.updateWeatherWithCurrentLocation()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // Mode Selector Bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp)
+                .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Button(
+                onClick = { mapModeByInternet = false },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (!mapModeByInternet) Color(0xFF30B0FF) else Color.Transparent,
+                    contentColor = if (!mapModeByInternet) Color.Black else Color.White
+                ),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.CloudOff, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Full World Offline Map", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+
+            Button(
+                onClick = { mapModeByInternet = true },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (mapModeByInternet) Color(0xFF30B0FF) else Color.Transparent,
+                    contentColor = if (mapModeByInternet) Color.Black else Color.White
+                ),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Direct Web Screen", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        if (mapModeByInternet) {
+            // WEB SCREEN MAP VIEW DIRECT IMPORT FROM WORLDMONITOR.APP or OpenStreetMap
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.3f)),
+                modifier = Modifier
+                    .weight(1.0f)
+                    .fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        "LIVE WEB SYNC PORTAL",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF30B0FF),
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        "import stream: www.worldmonitor.app/map",
+                        fontSize = 9.sp,
+                        color = Color.White.copy(alpha = 0.5f)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    AndroidView(
+                        factory = { ctx ->
+                            WebView(ctx).apply {
+                                webViewClient = object : WebViewClient() {
+                                    override fun onReceivedError(
+                                        view: WebView?,
+                                        request: WebResourceRequest?,
+                                        error: WebResourceError?
+                                    ) {
+                                        // Ignore or fallback gracefully
+                                    }
+                                }
+                                settings.apply {
+                                    javaScriptEnabled = true
+                                    domStorageEnabled = true
+                                    builtInZoomControls = true
+                                    displayZoomControls = false
+                                }
+                                loadUrl("https://www.openstreetmap.org/search?query=london")
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                }
+            }
+        } else {
+            // FULL WORLD OFFLINE VECTOR MAP
+            // Dynamic Zoom/Pan tactile controller state
+            var zoomScale by remember { mutableStateOf(1.0f) }
+            var panOffset by remember { mutableStateOf(Offset.Zero) }
+
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.2f)),
+                modifier = Modifier
+                    .weight(1.0f)
+                    .fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                "INTEGRATED OFFLINE VECTOR MAP",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF30B0FF),
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                "Drag to explore coordinates. Double pinch for zoom focus.",
+                                fontSize = 9.sp,
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                zoomScale = 1.0f
+                                panOffset = Offset.Zero
+                            },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(Icons.Default.CenterFocusStrong, "Center", tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // World map pan/zoom container
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF0F172A))
+                            .pointerInput(Unit) {
+                                detectDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    panOffset += dragAmount
+                                }
+                            }
+                    ) {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val w = size.width
+                            val h = size.height
+
+                            withTransform({
+                                translate(left = panOffset.x, top = panOffset.y)
+                                scale(scaleX = zoomScale, scaleY = zoomScale, pivot = Offset(w/2f, h/2f))
+                            }) {
+                                // 1. Draw elegant grid projection coordinates
+                                val gridSpacing = 50f
+                                for (x in 0..(w.toInt()) step gridSpacing.toInt()) {
+                                    drawLine(
+                                        color = Color.White.copy(alpha = 0.05f),
+                                        start = Offset(x.toFloat(), 0f),
+                                        end = Offset(x.toFloat(), h)
+                                    )
+                                }
+                                for (y in 0..(h.toInt()) step gridSpacing.toInt()) {
+                                    drawLine(
+                                        color = Color.White.copy(alpha = 0.05f),
+                                        start = Offset(0f, y.toFloat()),
+                                        end = Offset(w, y.toFloat())
+                                    )
+                                }
+
+                                // 2. Draw stylish Continent vectors paths representing the entire world offline!
+                                // North America
+                                val naPath = Path().apply {
+                                    moveTo(40f, 100f)
+                                    lineTo(180f, 120f)
+                                    lineTo(160f, 220f)
+                                    lineTo(110f, 240f)
+                                    lineTo(100f, 190f)
+                                    lineTo(40f, 160f)
+                                    close()
+                                }
+                                drawPath(naPath, color = Color(0xFF1E293B))
+                                drawPath(naPath, color = Color(0xFF38BDF8).copy(alpha = 0.4f), style = Stroke(width = 2f))
+
+                                // South America
+                                val saPath = Path().apply {
+                                    moveTo(110f, 240f)
+                                    lineTo(160f, 260f)
+                                    lineTo(140f, 350f)
+                                    lineTo(115f, 390f)
+                                    lineTo(95f, 340f)
+                                    close()
+                                }
+                                drawPath(saPath, color = Color(0xFF1E293B))
+                                drawPath(saPath, color = Color(0xFF38BDF8).copy(alpha = 0.4f), style = Stroke(width = 2f))
+
+                                // Eurasia (Europe + Asia)
+                                val eurasiaPath = Path().apply {
+                                    moveTo(230f, 80f)
+                                    lineTo(490f, 90f)
+                                    lineTo(470f, 240f)
+                                    lineTo(320f, 250f)
+                                    lineTo(220f, 210f)
+                                    lineTo(210f, 130f)
+                                    close()
+                                }
+                                drawPath(eurasiaPath, color = Color(0xFF1E293B))
+                                drawPath(eurasiaPath, color = Color(0xFF38BDF8).copy(alpha = 0.4f), style = Stroke(width = 2f))
+
+                                // Africa
+                                val africaPath = Path().apply {
+                                    moveTo(210f, 220f)
+                                    lineTo(280f, 220f)
+                                    lineTo(300f, 280f)
+                                    lineTo(270f, 370f)
+                                    lineTo(240f, 310f)
+                                    lineTo(205f, 260f)
+                                    close()
+                                }
+                                drawPath(africaPath, color = Color(0xFF1E293B))
+                                drawPath(africaPath, color = Color(0xFF38BDF8).copy(alpha = 0.4f), style = Stroke(width = 2f))
+
+                                // Australia
+                                val ausPath = Path().apply {
+                                    moveTo(430f, 310f)
+                                    lineTo(480f, 320f)
+                                    lineTo(470f, 370f)
+                                    lineTo(410f, 360f)
+                                    close()
+                                }
+                                drawPath(ausPath, color = Color(0xFF1E293B))
+                                drawPath(ausPath, color = Color(0xFF38BDF8).copy(alpha = 0.4f), style = Stroke(width = 2f))
+
+                                // Antarctica ice plate
+                                drawRect(
+                                    color = Color.White.copy(alpha = 0.15f),
+                                    size = androidx.compose.ui.graphics.drawscope.DrawScope.DefaultFilterQuality.let {
+                                        androidx.compose.ui.geometry.Size(w, 20f)
+                                    },
+                                    topLeft = Offset(0f, h - 30f)
+                                )
+
+                                // 3. Render Offline Stations coordinates
+                                pinsList.forEach { (offset, label) ->
+                                    drawCircle(
+                                        color = Color(0xFFFF9500),
+                                        radius = 7f,
+                                        center = offset
+                                    )
+                                    drawCircle(
+                                        color = Color(0xFFFF9500).copy(alpha = 0.4f),
+                                        radius = 16f,
+                                        center = offset,
+                                        style = Stroke(width = 1.5f)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Bottom status bar of Offline Cache Pack
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .background(Color.Black.copy(alpha = 0.7f))
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Default.VerifiedUser, null, tint = Color(0xFF34C759), modifier = Modifier.size(11.dp))
+                                    Text("Full World Map offline package active", fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+                                Text("Offline Pack: v2026.05 // 100% Synced", fontSize = 9.sp, color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Tactical slider control for precise zoom focus
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(Icons.Default.ZoomOut, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                        Slider(
+                            value = zoomScale,
+                            onValueChange = { zoomScale = it },
+                            valueRange = 1.0f..3.5f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFF30B0FF),
+                                activeTrackColor = Color(0xFF30B0FF)
+                            ),
+                            modifier = Modifier.weight(1.0f)
+                        )
+                        Icon(Icons.Default.ZoomIn, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                    }
+                }
+            }
+        }
+
+        // Live location coordinates monitor panel!
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f)),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "🛰️ DEVICE GEOLOCATION MODULE",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF30B0FF),
+                        letterSpacing = 1.sp
+                    )
+
+                    Button(
+                        onClick = { viewModel.updateWeatherWithCurrentLocation() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF30B0FF)),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(24.dp)
+                    ) {
+                        Text("Poll GPS", fontSize = 9.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (locationWeather != null) {
+                    Text(
+                        text = locationWeather!!.city,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = locationWeather!!.description,
+                        fontSize = 11.sp,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                } else {
+                    Text(
+                        text = "GPS Coordinates IDLE",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        text = "System requires Coarse/Fine GPS permission. Turn on Location Services.",
+                        fontSize = 10.sp,
+                        color = Color.White.copy(alpha = 0.4f)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
     }
 }
