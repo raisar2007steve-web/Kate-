@@ -1,0 +1,6 @@
+{
+  "name": "KATE.OS",
+  "description": "Futuristic standalone Autonomous Agentic AI Operating System assistant, memory container, and digital companion.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
