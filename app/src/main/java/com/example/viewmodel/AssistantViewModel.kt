@@ -180,12 +180,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             if (isApiKeyConfigured()) {
                 try {
                     val apiKey = BuildConfig.GEMINI_API_KEY
-                    val prompt = "Generate a very brief, high-fidelity daily news digest of global developments, " +
-                            "notably covering India's tech and market indices rising, " +
-                            "and stock market fluctuations with Sensex, Nifty, Dow Jones and Nasdaq indexes. " +
-                            "In addition, reference live updates from stream channel '$activeChannelName'. " +
+                    val prompt = "Generate a very brief, high-fidelity daily news digest of current global developments, geopolitics, and technology. " +
+                            "Additionally, provide a brief update on global stock market fluctuations (e.g., Sensex, Nasdaq, Dow). " +
+                            "Simulate live analysis by referencing updates theoretically broadcasted from '$activeChannelName'. " +
                             "Keep it as a neat, bulleted summary of 3 precise points formatted in beautiful markdown, " +
-                            "each beginning with a topic badge or icon (e.g. [BREAKING], [STOCKS], [INDIA]). " +
+                            "each beginning with a topic badge or icon (e.g. 🌐 [GLOBAL], 💼 [MARKETS], 📡 [$activeChannelName]). " +
                             "Limit the output to 120 words maximum."
                     
                     val request = GenerateContentRequest(
@@ -216,15 +215,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private fun getFallbackSummary(channel: String): String {
         val rand = (1..3).random()
         return when (rand) {
-            1 -> "🔴 **[BREAKING // $channel]**: Market indices continue rallying as BSE Sensex touches a lifetime high of 74,825.80 points (+1.15%).\n\n" +
-                 "📈 **[SENSEX & NIFTY]**: Technology and banking stocks lead structural inflows. Heavy buy-side volumes detected.\n\n" +
-                 "🇮🇳 **[NATION COGNIZANCE]**: Infrastructure development accelerates near Mumbai and Bengaluru smart-city corridors, marking 100% offline network scale readiness."
-            2 -> "🔴 **[LIVE ANNOUNCEMENT // $channel]**: India's bilateral trading pipelines with European and American entities increase by $+15B in structural value.\n\n" +
-                 "📈 **[MARKETS]**: Nifty 50 achieves key psychological level of 22,750.40, marking +1.22% up-tick. Global NASDAQ indexes consolidated at -0.35%.\n\n" +
-                 "🇮🇳 **[STALLS & INFRASTRUCTURE]**: Local retail networks and digitizing street vendors adopt unified digital UPI pay nodes across major bazaars."
-            else -> "🔴 **[AI SUMMARY // $channel]**: Heavy climate monitoring radars trace shifting weather loops over Indian Ocean corridors. Pre-storm patterns observed in coastal bays.\n\n" +
-                 "📈 **[MARKETS]**: IT indices surge +2.10% following large global enterprise cloud deals. Dow Jones maintains standard support at 39,120.20 (+0.45%).\n\n" +
-                 "🇮🇳 **[METROPOLITAN CORRIDOR]**: Modern smart-hubs integrate dense automated transport grids, boosting local micro-malls and food hubs."
+            1 -> "🔴 **[BREAKING // $channel]**: Global market indices continue to consolidate as global GDP growth forecasts stabilize.\n\n" +
+                 "📈 **[MARKETS]**: Technology and banking stocks lead structural inflows across US and Asian exchanges. Heavy buy-side volumes detected.\n\n" +
+                 "🌐 **[GLOBAL ALLIANCES]**: World leaders congregate to discuss new sustainable energy milestones, setting broad international targets."
+            2 -> "🔴 **[LIVE ANNOUNCEMENT // $channel]**: International space agencies successfully map multi-planetary deployment models for future decades.\n\n" +
+                 "📈 **[MARKETS]**: European equities achieve key support levels, and the global NASDAQ index shows resilience amidst shifting fiscal policies.\n\n" +
+                 "🌐 **[SUPPLY CHAIN]**: Cross-continental shipping networks integrate automated digital logistics pipelines, streamlining worldwide transport."
+            else -> "🔴 **[AI SUMMARY // $channel]**: Global climate monitoring radars trace shifting weather anomalies and sea-level patterns with unprecedented precision.\n\n" +
+                 "📈 **[MARKETS]**: Tech indices surge following wide-scale international enterprise cloud partnerships. The Dow Jones maintains robust baseline points.\n\n" +
+                 "🌐 **[TECHNOLOGY DEPLOYMENTS]**: Smart-cities globally expand robust metropolitan AI transport grids, reducing emissions and optimizing traffic streams."
         }
     }
 

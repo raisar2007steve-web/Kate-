@@ -1011,11 +1011,13 @@ data class StockIndex(
 )
 
 val stockIndexesList = listOf(
-    StockIndex("BSE SENSEX", "74,825.80", "▲ +1.15% (+850)", true, "Sensex BSE index climbs eight hundred fifty points to new record. High tech and bank stock inflows."),
-    StockIndex("NIFTY 50", "22,750.40", "▲ +1.22% (+275)", true, "Nifty fifty index claims record highs near twenty two thousand seven hundred fifty points, led by key IT sectors."),
-    StockIndex("NASDAQ", "16,340.50", "▼ -0.35% (-57)", false, "Nasdaq Composite settles lower by zero point thirty five percent on global tech profit taking."),
-    StockIndex("DOW JONES", "39,120.20", "▲ +0.45% (+175)", true, "Dow Jones climbing by one hundred seventy five points or zero point forty five percent on industrial gains."),
-    StockIndex("NIFTY IT", "34,210.10", "▲ +2.10% (+702)", true, "Nifty Information Tech index rallies heavily following cloud enterprise demand updates.")
+    StockIndex("S&P 500", "5,234.18", "▲ +0.85% (+44)", true, "S&P 500 climbs forty-four points driven by major tech stock inflows and consumer confidence."),
+    StockIndex("NASDAQ", "16,340.50", "▼ -0.35% (-57)", false, "Nasdaq Composite settles lower by zero point thirty-five percent on global tech profit taking."),
+    StockIndex("DOW JONES", "39,120.20", "▲ +0.45% (+175)", true, "Dow Jones climbing by one hundred seventy-five points or zero point forty-five percent on industrial gains."),
+    StockIndex("FTSE 100", "7,930.92", "▲ +0.60% (+47)", true, "London's FTSE 100 sees a steady gain led by energy and financial sectors."),
+    StockIndex("NIKKEI 225", "40,815.66", "▲ +1.50% (+603)", true, "Japan's Nikkei rallies over six hundred points reaching new heights amidst steady monetary policies."),
+    StockIndex("DAX 40", "18,205.94", "▲ +0.25% (+45)", true, "German DAX index edges higher following positive Eurozone manufacturing reports."),
+    StockIndex("BSE SENSEX", "74,825.80", "▲ +1.15% (+850)", true, "Sensex BSE index climbs eight hundred fifty points to new record. High tech and bank stock inflows.")
 )
 
 data class YouTubeChannel(
@@ -1027,13 +1029,16 @@ data class YouTubeChannel(
 )
 
 val newsChannelsList = listOf(
-    YouTubeChannel("Aaj Tak Live", "NqbF6Wlh-fQ", "AT", "🔴 LIVE", "Hindi"),
-    YouTubeChannel("NDTV 24x7", "WB-y7_ym9M0", "ND", "🔴 LIVE", "English"),
-    YouTubeChannel("India Today", "aMvU0aYl7C0", "IT", "🔴 LIVE", "English"),
-    YouTubeChannel("Republic Bharat", "yGvAmg9fMzo", "RB", "🔴 LIVE", "Hindi"),
-    YouTubeChannel("BBC News World", "y60wDzZt8yg", "BB", "🔴 LIVE", "English"),
-    YouTubeChannel("Al Jazeera Live", "gCNeDWCI0To", "AJ", "🔴 LIVE", "English"),
-    YouTubeChannel("DW News Live", "V9KzY83_N64", "DW", "🔴 LIVE", "English")
+    YouTubeChannel("Aaj Tak Live", "UCYPvAwZP8pZhSMW8qs7cVCw", "AT", "🔴 LIVE", "Hindi"),
+    YouTubeChannel("NDTV 24x7", "UCXBD5iG5cr4ZYZ99K-fmDHg", "ND", "🔴 LIVE", "English"),
+    YouTubeChannel("BBC News World", "UCCj956IF62FbT7Gouszaj9w", "BB", "🔴 LIVE", "English"),
+    YouTubeChannel("Al Jazeera Global", "UCfiwzLy-8yKzIbsmZTzxDgw", "AJ", "🔴 LIVE", "English"),
+    YouTubeChannel("Sky News UK", "UCkFclpi8U9VJjfxLYoms7Aw", "SK", "🔴 LIVE", "English"),
+    YouTubeChannel("France 24", "UCCCPCZNChQdGa9EkATeye4g", "FR", "🔴 LIVE", "English"),
+    YouTubeChannel("DW News", "UCbbS1GE942k3UVqpLklyhIA", "DW", "🔴 LIVE", "English"),
+    YouTubeChannel("TRT World", "UCnyCrv8b7bu0oWFXGyHaPzg", "TR", "🔴 LIVE", "English"),
+    YouTubeChannel("NBC News Live", "UChDKyKQ59fYz3JO2fl0Z6sg", "NB", "🔴 LIVE", "English"),
+    YouTubeChannel("Republic Bharat", "UCilbgr035NJ7BIkVPMeLyWA", "RB", "🔴 LIVE", "Hindi")
 )
 
 @Composable
@@ -1316,11 +1321,11 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
                                     domStorageEnabled = true
                                     mediaPlaybackRequiresUserGesture = false
                                 }
-                                loadUrl("https://www.youtube.com/embed/${activeChannel.id}?autoplay=1&mute=1&playsinline=1")
+                                loadUrl("https://www.youtube.com/embed/live_stream?channel=${activeChannel.id}&autoplay=1&mute=1&playsinline=1")
                             }
                         },
                         update = { webView ->
-                            webView.loadUrl("https://www.youtube.com/embed/${activeChannel.id}?autoplay=1&mute=1&playsinline=1")
+                            webView.loadUrl("https://www.youtube.com/embed/live_stream?channel=${activeChannel.id}&autoplay=1&mute=1&playsinline=1")
                         },
                         modifier = Modifier.fillMaxSize()
                     )
