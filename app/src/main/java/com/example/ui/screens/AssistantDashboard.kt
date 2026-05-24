@@ -74,7 +74,7 @@ enum class SystemUiState {
 }
 
 enum class IosLaunchApp {
-    KATE_CHAT, WEATHER_NEWS, WORLD_MAP, REMINDERS, NOTES
+    KATE_CHAT, WEATHER, NEWS, WORLD_MAP, REMINDERS, NOTES
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -151,7 +151,8 @@ fun AssistantDashboard(
                         ) { app ->
                             when (app) {
                                 IosLaunchApp.KATE_CHAT -> KateChatAppView(viewModel)
-                                IosLaunchApp.WEATHER_NEWS -> WeatherNewsAppView(viewModel)
+                                IosLaunchApp.WEATHER -> WeatherAppView(viewModel)
+                                IosLaunchApp.NEWS -> NewsAppView(viewModel)
                                 IosLaunchApp.WORLD_MAP -> WorldMapAppView(viewModel)
                                 IosLaunchApp.REMINDERS -> IosRemindersAppView(viewModel)
                                 IosLaunchApp.NOTES -> IosNotesAppView(viewModel)
@@ -372,34 +373,25 @@ fun IosBottomAppDock(
                         iconVector = Icons.Default.WbSunny,
                         accentColor = Color(0xFFFF9500),
                         isSelected = false,
-                        onClick = { onAppLaunch(IosLaunchApp.WEATHER_NEWS) }
+                        onClick = { onAppLaunch(IosLaunchApp.WEATHER) }
                     )
 
-                    // App Icon 3: World Map
+                    // App Icon 3: News
+                    DockAppIcon(
+                        label = "News",
+                        iconVector = Icons.Default.Article,
+                        accentColor = Color(0xFFFF3B30),
+                        isSelected = false,
+                        onClick = { onAppLaunch(IosLaunchApp.NEWS) }
+                    )
+
+                    // App Icon 4: World Map
                     DockAppIcon(
                         label = "World Map",
                         iconVector = Icons.Default.Map,
                         accentColor = Color(0xFF30B0FF),
                         isSelected = false,
                         onClick = { onAppLaunch(IosLaunchApp.WORLD_MAP) }
-                    )
-
-                    // App Icon 4: Reminders
-                    DockAppIcon(
-                        label = "Reminders",
-                        iconVector = Icons.Default.ListAlt,
-                        accentColor = Color(0xFF34C759),
-                        isSelected = false,
-                        onClick = { onAppLaunch(IosLaunchApp.REMINDERS) }
-                    )
-
-                    // App Icon 5: Notes
-                    DockAppIcon(
-                        label = "Notes",
-                        iconVector = Icons.Default.StickyNote2,
-                        accentColor = Color(0xFFFFCC00),
-                        isSelected = false,
-                        onClick = { onAppLaunch(IosLaunchApp.NOTES) }
                     )
                 }
             }
@@ -482,7 +474,7 @@ fun IosLockScreenView(
 fun IosHomeScreenGrid(
     onAppLaunch: (IosLaunchApp) -> Unit
 ) {
-    // A 4-column grid of icons representing system apps
+    // A grid of icons representing system apps
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -494,15 +486,17 @@ fun IosHomeScreenGrid(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             HomeScreenAppIcon(label = "Kate Chat", iconVector = Icons.Default.Cyclone, color = Color(0xFF00F0FF), onClick = { onAppLaunch(IosLaunchApp.KATE_CHAT) })
-            HomeScreenAppIcon(label = "Weather", iconVector = Icons.Default.WbSunny, color = Color(0xFFFF9500), onClick = { onAppLaunch(IosLaunchApp.WEATHER_NEWS) })
+            HomeScreenAppIcon(label = "Weather", iconVector = Icons.Default.WbSunny, color = Color(0xFFFF9500), onClick = { onAppLaunch(IosLaunchApp.WEATHER) })
+            HomeScreenAppIcon(label = "News", iconVector = Icons.Default.Article, color = Color(0xFFFF3B30), onClick = { onAppLaunch(IosLaunchApp.NEWS) })
             HomeScreenAppIcon(label = "Maps", iconVector = Icons.Default.Map, color = Color(0xFF30B0FF), onClick = { onAppLaunch(IosLaunchApp.WORLD_MAP) })
-            HomeScreenAppIcon(label = "Reminders", iconVector = Icons.Default.ListAlt, color = Color(0xFF34C759), onClick = { onAppLaunch(IosLaunchApp.REMINDERS) })
         }
         Spacer(modifier = Modifier.height(24.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Start
         ) {
+            HomeScreenAppIcon(label = "Reminders", iconVector = Icons.Default.ListAlt, color = Color(0xFF34C759), onClick = { onAppLaunch(IosLaunchApp.REMINDERS) })
+            Spacer(modifier = Modifier.width(30.dp))
             HomeScreenAppIcon(label = "Notes", iconVector = Icons.Default.StickyNote2, color = Color(0xFFFFCC00), onClick = { onAppLaunch(IosLaunchApp.NOTES) })
         }
     }
@@ -1342,27 +1336,13 @@ fun MarkdownText(text: String, color: Color = Color.White, fontSize: androidx.co
 }
 
 @Composable
-fun WeatherNewsAppView(viewModel: AssistantViewModel) {
-    val weatherData by viewModel.currentWeatherData.collectAsStateWithLifecycle()
-    val gpsWeather by viewModel.locationWeather.collectAsStateWithLifecycle()
+fun NewsAppView(viewModel: AssistantViewModel) {
     val newsArticles by viewModel.newsFeed.collectAsStateWithLifecycle()
     val aiSummary by viewModel.aiNewsSummary.collectAsStateWithLifecycle()
     val isSummaryLoading by viewModel.isNewsSummaryLoading.collectAsStateWithLifecycle()
     
-    var isLiveGpsMode by remember { mutableStateOf(false) }
     var selectedChannelInputIndex by remember { mutableStateOf(0) }
     val activeChannel = newsChannelsList.getOrElse(selectedChannelInputIndex) { newsChannelsList[0] }
-
-    val locationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions(),
-        onResult = { permissions ->
-            val fineGranted = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] == true
-            val coarseGranted = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] == true
-            if (fineGranted || coarseGranted) {
-                viewModel.updateWeatherWithCurrentLocation()
-            }
-        }
-    )
 
     LazyColumn(
         modifier = Modifier
@@ -1397,18 +1377,14 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
 
                 IconButton(
                     onClick = { 
-                        if (isLiveGpsMode) {
-                            viewModel.updateWeatherWithCurrentLocation()
-                        } else {
-                            viewModel.cycleWeather()
-                        }
+                        // Refresh
                     },
                     colors = IconButtonDefaults.iconButtonColors(containerColor = Color.White.copy(alpha = 0.12f)),
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
-                        contentDescription = "Switch or Refresh Station",
+                        contentDescription = "Refresh News",
                         tint = Color(0xFFFF9500),
                         modifier = Modifier.size(18.dp)
                     )
@@ -1723,171 +1699,7 @@ fun WeatherNewsAppView(viewModel: AssistantViewModel) {
             }
         }
 
-        // Weather toggle switch segment (retained under news view)
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(
-                            color = if (!isLiveGpsMode) Color(0xFFFF9500).copy(alpha = 0.2f) else Color.Transparent,
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        .border(
-                            width = 1.dp,
-                            color = if (!isLiveGpsMode) Color(0xFFFF9500) else Color.Transparent,
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        .clickable { isLiveGpsMode = false }
-                        .padding(vertical = 10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "WORLD STATIONS",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (!isLiveGpsMode) Color.White else Color.White.copy(alpha = 0.6f)
-                    )
-                }
 
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(
-                            color = if (isLiveGpsMode) Color(0xFFFF9500).copy(alpha = 0.2f) else Color.Transparent,
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        .border(
-                            width = 1.dp,
-                            color = if (isLiveGpsMode) Color(0xFFFF9500) else Color.Transparent,
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        .clickable { isLiveGpsMode = true }
-                        .padding(vertical = 10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "LIVE GPS WEATHER",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isLiveGpsMode) Color.White else Color.White.copy(alpha = 0.6f)
-                    )
-                }
-            }
-        }
-
-        // Weather Widget active state
-        item {
-            if (isLiveGpsMode && gpsWeather == null) {
-                Card(
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                    border = BorderStroke(1.dp, Color(0xFFFF9500).copy(alpha = 0.4f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Brush.verticalGradient(listOf(Color(0xFF37474F), Color(0xFF263238))))
-                            .padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.MyLocation, contentDescription = null, tint = Color(0xFFFF9500), modifier = Modifier.size(32.dp))
-                        Text(text = "Satellite GPS Standby", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text(
-                            text = "Enable device location. Click button to query live weather forecast.",
-                            fontSize = 11.sp,
-                            color = Color.White.copy(alpha = 0.7f),
-                            textAlign = TextAlign.Center
-                        )
-                        Button(
-                            onClick = {
-                                locationPermissionLauncher.launch(
-                                    arrayOf(
-                                        android.Manifest.permission.ACCESS_FINE_LOCATION,
-                                        android.Manifest.permission.ACCESS_COARSE_LOCATION
-                                    )
-                                )
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9500)),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("ACTIVATE GPS FORECAST", fontWeight = FontWeight.Bold, color = Color.Black)
-                        }
-                    }
-                }
-            } else {
-                val activeWeather = if (isLiveGpsMode && gpsWeather != null) gpsWeather!! else weatherData
-                Card(
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = if (activeWeather.condition == "Sunny") {
-                                        listOf(Color(0xFF2979FF), Color(0xFF2196F3))
-                                    } else if (activeWeather.condition == "Drizzle") {
-                                        listOf(Color(0xFF37474F), Color(0xFF546E7A))
-                                    } else {
-                                        listOf(Color(0xFF5E35B1), Color(0xFF7E57C2))
-                                    }
-                                )
-                            )
-                            .padding(18.dp)
-                    ) {
-                        Column {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text(text = activeWeather.city, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                    Text(text = activeWeather.condition, fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f))
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(RoundedCornerShape(50))
-                                        .background(Color.White.copy(alpha = 0.2f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = if (activeWeather.condition == "Sunny") Icons.Default.WbSunny else Icons.Default.Cloud,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text(text = activeWeather.temperature, fontSize = 48.sp, fontWeight = FontWeight.Light, color = Color.White)
-                                Text(
-                                    text = if (isLiveGpsMode) "Station localized\nvia Satellite" else "Station calibrated\nvia WorldMonitor",
-                                    fontSize = 10.sp,
-                                    color = Color.White.copy(alpha = 0.7f),
-                                    modifier = Modifier.padding(bottom = 10.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
         // BREAKING NEWS GENERAL FEED (Important Cards)
         item {
@@ -2817,6 +2629,244 @@ val indianDistricts = listOf(
         )
     )
 )
+
+@Composable
+fun WeatherAppView(viewModel: AssistantViewModel) {
+    val weatherData by viewModel.currentWeatherData.collectAsStateWithLifecycle()
+    val gpsWeather by viewModel.locationWeather.collectAsStateWithLifecycle()
+    
+    var isLiveGpsMode by remember { mutableStateOf(false) }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+        onResult = { permissions ->
+            val fineGranted = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] == true
+            val coarseGranted = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] == true
+            if (fineGranted || coarseGranted) {
+                viewModel.updateWeatherWithCurrentLocation()
+            }
+        }
+    )
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        // App Header
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Global Weather Station",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "POLLING SATELLITES & LIVE SENSORS",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFFFF9500),
+                        letterSpacing = 0.5.sp
+                    )
+                }
+
+                IconButton(
+                    onClick = { 
+                        if (isLiveGpsMode) {
+                            viewModel.updateWeatherWithCurrentLocation()
+                        } else {
+                            viewModel.cycleWeather()
+                        }
+                    },
+                    colors = IconButtonDefaults.iconButtonColors(containerColor = Color.White.copy(alpha = 0.12f)),
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Switch or Refresh Station",
+                        tint = Color(0xFFFF9500),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+
+        // Weather toggle switch segment (retained under weather view)
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(
+                            color = if (!isLiveGpsMode) Color(0xFFFF9500).copy(alpha = 0.2f) else Color.Transparent,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (!isLiveGpsMode) Color(0xFFFF9500) else Color.Transparent,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .clickable { isLiveGpsMode = false }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "WORLD STATIONS",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (!isLiveGpsMode) Color.White else Color.White.copy(alpha = 0.6f)
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(
+                            color = if (isLiveGpsMode) Color(0xFFFF9500).copy(alpha = 0.2f) else Color.Transparent,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (isLiveGpsMode) Color(0xFFFF9500) else Color.Transparent,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .clickable { isLiveGpsMode = true }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "LIVE GPS WEATHER",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isLiveGpsMode) Color.White else Color.White.copy(alpha = 0.6f)
+                    )
+                }
+            }
+        }
+
+        // Weather Widget active state
+        item {
+            if (isLiveGpsMode && gpsWeather == null) {
+                Card(
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                    border = BorderStroke(1.dp, Color(0xFFFF9500).copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Brush.verticalGradient(listOf(Color(0xFF37474F), Color(0xFF263238))))
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.MyLocation, contentDescription = null, tint = Color(0xFFFF9500), modifier = Modifier.size(32.dp))
+                        Text(text = "Satellite GPS Standby", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(
+                            text = "Enable device location. Click button to query live weather forecast.",
+                            fontSize = 11.sp,
+                            color = Color.White.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center
+                        )
+                        Button(
+                            onClick = {
+                                locationPermissionLauncher.launch(
+                                    arrayOf(
+                                        android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                        android.Manifest.permission.ACCESS_COARSE_LOCATION
+                                    )
+                                )
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9500)),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("ACTIVATE GPS FORECAST", fontWeight = FontWeight.Bold, color = Color.Black)
+                        }
+                    }
+                }
+            } else {
+                val activeWeather = if (isLiveGpsMode && gpsWeather != null) gpsWeather!! else weatherData
+                Card(
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = if (activeWeather.condition == "Sunny") {
+                                        listOf(Color(0xFF2979FF), Color(0xFF2196F3))
+                                    } else if (activeWeather.condition.contains("Rain") || activeWeather.condition == "Drizzle") {
+                                        listOf(Color(0xFF37474F), Color(0xFF546E7A))
+                                    } else {
+                                        listOf(Color(0xFF5E35B1), Color(0xFF7E57C2))
+                                    }
+                                )
+                            )
+                            .padding(18.dp)
+                    ) {
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(text = activeWeather.city, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text(text = activeWeather.condition, fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f))
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(50))
+                                        .background(Color.White.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (activeWeather.condition == "Sunny") Icons.Default.WbSunny else Icons.Default.Cloud,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(text = activeWeather.temperature, fontSize = 48.sp, fontWeight = FontWeight.Light, color = Color.White)
+                                Text(
+                                    text = if (isLiveGpsMode) "Station localized\nvia Satellite" else "Station calibrated\nvia WorldMonitor",
+                                    fontSize = 10.sp,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    modifier = Modifier.padding(bottom = 10.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun WorldMapAppView(viewModel: AssistantViewModel) {
