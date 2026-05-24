@@ -8,6 +8,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FilterVintage
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,18 +62,40 @@ fun SplashScreen() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        // Huawei red logo placeholder using Canvas or Box
+        Box(
+            modifier = Modifier
+                .size(80.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.FilterVintage, // closest to red lotus petals
+                contentDescription = "Huawei Logo",
+                tint = Color(0xFFE50012), // Huawei Red
+                modifier = Modifier.size(72.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "BOOTING PROCESS OS...",
+            text = "HUAWEI",
             color = Color.White,
-            fontSize = 18.sp,
+            fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
-            letterSpacing = 2.sp
+            letterSpacing = 4.sp,
+            fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
         )
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(200.dp)) // push bottom text down
         Text(
-            text = "Powered by starly",
+            text = "Powered by",
             color = Color.Gray,
             fontSize = 12.sp,
+            letterSpacing = 1.sp
+        )
+        Text(
+            text = "Android",
+            color = Color.White,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
             letterSpacing = 1.sp
         )
     }

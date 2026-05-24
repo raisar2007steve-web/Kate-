@@ -69,6 +69,10 @@ import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.sin
 
+enum class SystemUiState {
+    LOCKSCREEN, HOMESCREEN, IN_APP
+}
+
 enum class IosLaunchApp {
     KATE_CHAT, WEATHER_NEWS, WORLD_MAP, REMINDERS, NOTES
 }
@@ -81,6 +85,7 @@ fun AssistantDashboard(
 ) {
     val context = LocalContext.current
     var activeApp by remember { mutableStateOf(IosLaunchApp.KATE_CHAT) }
+    var systemUiState by remember { mutableStateOf(SystemUiState.LOCKSCREEN) }
 
     // Collect TTS and widgets statuses
     val isSpeaking by viewModel.isSpeaking.collectAsStateWithLifecycle()
@@ -103,48 +108,71 @@ fun AssistantDashboard(
             .fillMaxSize()
             .background(iosWallpaperBrush)
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            
-            // 1. Sleek Apple-style Status Bar
-            IosStatusBar(batteryLevel = batteryLvl)
+        if (systemUiState == SystemUiState.LOCKSCREEN) {
+            IosLockScreenView(
+                onUnlock = { systemUiState = SystemUiState.HOMESCREEN },
+                viewModel = viewModel
+            )
+        } else {
+            Column(modifier = Modifier.fillMaxSize()) {
+                
+                // 1. Sleek Apple-style Status Bar
+                IosStatusBar(batteryLevel = batteryLvl)
 
-            // 2. Main Active Application Window (Kate Chat, Weather, Map, Reminders, Notes)
-            Box(
-                modifier = Modifier
-                    .weight(1.0f)
-                    .fillMaxWidth()
-            ) {
-                AnimatedContent(
-                    targetState = activeApp,
-                    transitionSpec = {
-                        slideInVertically(
-                            animationSpec = spring(stiffness = Spring.StiffnessLow),
-                            initialOffsetY = { it }
-                        ) + fadeIn() togetherWith
-                        slideOutVertically(
-                            animationSpec = spring(stiffness = Spring.StiffnessLow),
-                            targetOffsetY = { -it }
-                        ) + fadeOut()
-                    },
-                    label = "IosAppTransitionPortal"
-                ) { app ->
-                    when (app) {
-                        IosLaunchApp.KATE_CHAT -> KateChatAppView(viewModel)
-                        IosLaunchApp.WEATHER_NEWS -> WeatherNewsAppView(viewModel)
-                        IosLaunchApp.WORLD_MAP -> WorldMapAppView(viewModel)
-                        IosLaunchApp.REMINDERS -> IosRemindersAppView(viewModel)
-                        IosLaunchApp.NOTES -> IosNotesAppView(viewModel)
+                if (systemUiState == SystemUiState.HOMESCREEN) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        IosHomeScreenGrid(
+                            onAppLaunch = {
+                                activeApp = it
+                                systemUiState = SystemUiState.IN_APP
+                            }
+                        )
+                    }
+                } else {
+                    // 2. Main Active Application Window (Kate Chat, Weather, Map, Reminders, Notes)
+                    Box(
+                        modifier = Modifier
+                            .weight(1.0f)
+                            .fillMaxWidth()
+                    ) {
+                        AnimatedContent(
+                            targetState = activeApp,
+                            transitionSpec = {
+                                slideInVertically(
+                                    animationSpec = spring(stiffness = Spring.StiffnessLow),
+                                    initialOffsetY = { it }
+                                ) + fadeIn() togetherWith
+                                slideOutVertically(
+                                    animationSpec = spring(stiffness = Spring.StiffnessLow),
+                                    targetOffsetY = { -it }
+                                ) + fadeOut()
+                            },
+                            label = "IosAppTransitionPortal"
+                        ) { app ->
+                            when (app) {
+                                IosLaunchApp.KATE_CHAT -> KateChatAppView(viewModel)
+                                IosLaunchApp.WEATHER_NEWS -> WeatherNewsAppView(viewModel)
+                                IosLaunchApp.WORLD_MAP -> WorldMapAppView(viewModel)
+                                IosLaunchApp.REMINDERS -> IosRemindersAppView(viewModel)
+                                IosLaunchApp.NOTES -> IosNotesAppView(viewModel)
+                            }
+                        }
                     }
                 }
-            }
 
-            // 3. Apple iOS Bottom Translucent App Dock
-            IosBottomAppDock(
-                activeApp = activeApp,
-                onAppLaunch = { activeApp = it },
-                isSpeaking = isSpeaking,
-                isMuted = isVoiceMuted
-            )
+                // 3. Apple iOS Bottom Translucent App Dock (Used as general launcher & Home button)
+                IosBottomAppDock(
+                    activeApp = activeApp,
+                    onAppLaunch = {
+                        activeApp = it
+                        systemUiState = SystemUiState.IN_APP
+                    },
+                    isSpeaking = isSpeaking,
+                    isMuted = isVoiceMuted,
+                    systemUiState = systemUiState,
+                    onHomeClick = { systemUiState = SystemUiState.HOMESCREEN }
+                )
+            }
         }
     }
 }
@@ -286,72 +314,237 @@ fun IosBottomAppDock(
     activeApp: IosLaunchApp,
     onAppLaunch: (IosLaunchApp) -> Unit,
     isSpeaking: Boolean,
-    isMuted: Boolean
+    isMuted: Boolean,
+    systemUiState: SystemUiState,
+    onHomeClick: () -> Unit
 ) {
-    // Beautiful glassmorphic bottom tray holding Apple iOS dock icons (compact-optimized to fit 5 items)
-    Box(
+    Column {
+        if (systemUiState == SystemUiState.IN_APP) {
+            // Home Indicator Bar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 100.dp, height = 4.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.White.copy(alpha = 0.5f))
+                        .clickable { onHomeClick() }
+                )
+            }
+        }
+        
+        if (systemUiState == SystemUiState.HOMESCREEN) {
+            // Beautiful glassmorphic bottom tray holding Apple iOS dock icons (compact-optimized to fit 5 items)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(start = 12.dp, end = 12.dp, bottom = 12.dp, top = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    modifier = Modifier
+                        .shadow(16.dp, shape = RoundedCornerShape(28.dp))
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(Color.White.copy(alpha = 0.12f)) // Apple classic translucent bar
+                        .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.08f), Color.Transparent)))
+                        .padding(horizontal = 10.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // App Icon 1: Kate Chat
+                    DockAppIcon(
+                        label = "Kate Chat",
+                        iconVector = Icons.Default.Cyclone,
+                        accentColor = Color(0xFF00F0FF),
+                        isSelected = false,
+                        isPulse = isSpeaking,
+                        onClick = { onAppLaunch(IosLaunchApp.KATE_CHAT) }
+                    )
+
+                    // App Icon 2: Weather
+                    DockAppIcon(
+                        label = "Weather",
+                        iconVector = Icons.Default.WbSunny,
+                        accentColor = Color(0xFFFF9500),
+                        isSelected = false,
+                        onClick = { onAppLaunch(IosLaunchApp.WEATHER_NEWS) }
+                    )
+
+                    // App Icon 3: World Map
+                    DockAppIcon(
+                        label = "World Map",
+                        iconVector = Icons.Default.Map,
+                        accentColor = Color(0xFF30B0FF),
+                        isSelected = false,
+                        onClick = { onAppLaunch(IosLaunchApp.WORLD_MAP) }
+                    )
+
+                    // App Icon 4: Reminders
+                    DockAppIcon(
+                        label = "Reminders",
+                        iconVector = Icons.Default.ListAlt,
+                        accentColor = Color(0xFF34C759),
+                        isSelected = false,
+                        onClick = { onAppLaunch(IosLaunchApp.REMINDERS) }
+                    )
+
+                    // App Icon 5: Notes
+                    DockAppIcon(
+                        label = "Notes",
+                        iconVector = Icons.Default.StickyNote2,
+                        accentColor = Color(0xFFFFCC00),
+                        isSelected = false,
+                        onClick = { onAppLaunch(IosLaunchApp.NOTES) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun IosLockScreenView(
+    onUnlock: () -> Unit,
+    viewModel: AssistantViewModel
+) {
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val dateFormat = remember { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()) }
+    var currentTime by remember { mutableStateOf(timeFormat.format(Date())) }
+    var currentDate by remember { mutableStateOf(dateFormat.format(Date())) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            val date = Date()
+            currentTime = timeFormat.format(date)
+            currentDate = dateFormat.format(date)
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+
+    Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(start = 12.dp, end = 12.dp, bottom = 12.dp, top = 6.dp),
-        contentAlignment = Alignment.Center
+            .fillMaxSize()
+            .padding(top = 100.dp, bottom = 48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Default.Lock, contentDescription = "Locked", tint = Color.White, modifier = Modifier.size(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(text = currentTime, fontSize = 72.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text(text = currentDate, fontSize = 18.sp, color = Color.White.copy(alpha = 0.8f))
+        }
+
+        // Fake Notifications
+        Column(
             modifier = Modifier
-                .shadow(16.dp, shape = RoundedCornerShape(28.dp))
-                .clip(RoundedCornerShape(28.dp))
-                .background(Color.White.copy(alpha = 0.12f)) // Apple classic translucent bar
-                .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.08f), Color.Transparent)))
-                .padding(horizontal = 10.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // App Icon 1: Kate Chat
-            DockAppIcon(
-                label = "Kate Chat",
-                iconVector = Icons.Default.Cyclone,
-                accentColor = Color(0xFF00F0FF),
-                isSelected = activeApp == IosLaunchApp.KATE_CHAT,
-                isPulse = isSpeaking,
-                onClick = { onAppLaunch(IosLaunchApp.KATE_CHAT) }
-            )
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Cyclone, contentDescription = null, tint = Color(0xFF00F0FF), modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("Kate.OS", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+                        Text("System nominal. Ready for commands.", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+                    }
+                }
+            }
+        }
 
-            // App Icon 2: Weather & News (worldmonitor.app)
-            DockAppIcon(
-                label = "Weather",
-                iconVector = Icons.Default.WbSunny,
-                accentColor = Color(0xFFFF9500),
-                isSelected = activeApp == IosLaunchApp.WEATHER_NEWS,
-                onClick = { onAppLaunch(IosLaunchApp.WEATHER_NEWS) }
-            )
-
-            // App Icon 3: Offline & Web World Map
-            DockAppIcon(
-                label = "World Map",
-                iconVector = Icons.Default.Map,
-                accentColor = Color(0xFF30B0FF),
-                isSelected = activeApp == IosLaunchApp.WORLD_MAP,
-                onClick = { onAppLaunch(IosLaunchApp.WORLD_MAP) }
-            )
-
-            // App Icon 4: Reminders (Checklists)
-            DockAppIcon(
-                label = "Reminders",
-                iconVector = Icons.Default.ListAlt,
-                accentColor = Color(0xFF34C759),
-                isSelected = activeApp == IosLaunchApp.REMINDERS,
-                onClick = { onAppLaunch(IosLaunchApp.REMINDERS) }
-            )
-
-            // App Icon 5: Notes (Encrypted matrices)
-            DockAppIcon(
-                label = "Notes",
-                iconVector = Icons.Default.StickyNote2,
-                accentColor = Color(0xFFFFCC00),
-                isSelected = activeApp == IosLaunchApp.NOTES,
-                onClick = { onAppLaunch(IosLaunchApp.NOTES) }
+        // Swipe up to unlock
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Tap to unlock", color = Color.White, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .size(width = 120.dp, height = 5.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.White)
+                    .clickable { onUnlock() }
             )
         }
+    }
+}
+
+@Composable
+fun IosHomeScreenGrid(
+    onAppLaunch: (IosLaunchApp) -> Unit
+) {
+    // A 4-column grid of icons representing system apps
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp, vertical = 48.dp)
+    ) {
+        // App icons on the home screen
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            HomeScreenAppIcon(label = "Kate Chat", iconVector = Icons.Default.Cyclone, color = Color(0xFF00F0FF), onClick = { onAppLaunch(IosLaunchApp.KATE_CHAT) })
+            HomeScreenAppIcon(label = "Weather", iconVector = Icons.Default.WbSunny, color = Color(0xFFFF9500), onClick = { onAppLaunch(IosLaunchApp.WEATHER_NEWS) })
+            HomeScreenAppIcon(label = "Maps", iconVector = Icons.Default.Map, color = Color(0xFF30B0FF), onClick = { onAppLaunch(IosLaunchApp.WORLD_MAP) })
+            HomeScreenAppIcon(label = "Reminders", iconVector = Icons.Default.ListAlt, color = Color(0xFF34C759), onClick = { onAppLaunch(IosLaunchApp.REMINDERS) })
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start
+        ) {
+            HomeScreenAppIcon(label = "Notes", iconVector = Icons.Default.StickyNote2, color = Color(0xFFFFCC00), onClick = { onAppLaunch(IosLaunchApp.NOTES) })
+        }
+    }
+}
+
+@Composable
+fun HomeScreenAppIcon(
+    label: String,
+    iconVector: androidx.compose.ui.graphics.vector.ImageVector,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(72.dp)
+            .clickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(60.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(color.copy(alpha = 0.2f))
+                .border(1.dp, color.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = iconVector,
+                contentDescription = label,
+                tint = color,
+                modifier = Modifier.size(32.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = Color.White,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
     }
 }
 

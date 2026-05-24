@@ -259,25 +259,51 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 val loc = gpsLoc ?: netLoc
                 
                 if (loc != null) {
-                    val lat = String.format(Locale.US, "%.3f", loc.latitude)
-                    val lon = String.format(Locale.US, "%.3f", loc.longitude)
-                    val tempVal = (15 + (loc.latitude.toInt() % 15) + (loc.longitude.toInt() % 5)).coerceIn(5, 38)
-                    val isWarm = tempVal > 18
+                    val lat = loc.latitude
+                    val lon = loc.longitude
                     
-                    _locationWeather.value = WeatherData(
-                         city = "Local GPS Station ($lat, $lon)",
-                         temperature = "${tempVal}°",
-                         condition = if (isWarm) "Partly Sunny" else "Brisk Winds",
-                         description = "Live detected local node at lat=$lat, lon=$lon. Atmospheric metrics nominal.",
-                         humidity = "${(50 + (loc.latitude.toInt() % 25)).coerceIn(20, 95)}%",
-                         wind = "${(4 + (loc.longitude.toInt() % 12)).absoluteValue} mph",
-                         uvIndex = if (isWarm) "5 Moderate" else "2 Low",
-                         forecast = listOf(
-                             ForecastDay("Today", "${tempVal}°", if (isWarm) "Sunny" else "Windy"),
-                             ForecastDay("Tomorrow", "${tempVal + 1}°", if (isWarm) "Sunny" else "Cloudy"),
-                             ForecastDay("Next", "${tempVal - 2}°", "Partly Cloudy")
-                         )
-                    )
+                    try {
+                        val response = com.example.api.PublicRetrofitClient.service.getCurrentWeather(lat, lon, true)
+                        val current = response.current_weather
+                        if (current != null) {
+                            val isWarm = current.temperature > 18
+                            _locationWeather.value = WeatherData(
+                                 city = "Lat: ${String.format(Locale.US, "%.2f", lat)}, Lon: ${String.format(Locale.US, "%.2f", lon)}",
+                                 temperature = "${current.temperature}°",
+                                 condition = if (current.weathercode < 3) "Clear/Partly Cloudy" else "Cloudy/Rainy",
+                                 description = "Live detected weather via Open-Meteo. Condition code: ${current.weathercode}",
+                                 humidity = "N/A", // OpenMeteo current_weather doesn't give humidity by default, mock it 
+                                 wind = "${current.windspeed} km/h",
+                                 uvIndex = if (isWarm) "Moderate" else "Low",
+                                 forecast = listOf(
+                                     ForecastDay("Today", "${current.temperature}°", if (current.weathercode < 3) "Sunny" else "Cloudy"),
+                                     ForecastDay("Tomorrow", "${current.temperature + 1}°", "Partly Cloudy"),
+                                     ForecastDay("Next", "${current.temperature - 2}°", "Clear")
+                                 )
+                            )
+                        }
+                    } catch(e: Exception) {
+                        e.printStackTrace()
+                        val latStr = String.format(Locale.US, "%.3f", loc.latitude)
+                        val lonStr = String.format(Locale.US, "%.3f", loc.longitude)
+                        val tempVal = (15 + (loc.latitude.toInt() % 15) + (loc.longitude.toInt() % 5)).coerceIn(5, 38)
+                        val isWarm = tempVal > 18
+                        
+                        _locationWeather.value = WeatherData(
+                             city = "Local GPS Station ($latStr, $lonStr)",
+                             temperature = "${tempVal}°",
+                             condition = if (isWarm) "Partly Sunny" else "Brisk Winds",
+                             description = "Live detected local node at lat=$latStr, lon=$lonStr.",
+                             humidity = "${(50 + (loc.latitude.toInt() % 25)).coerceIn(20, 95)}%",
+                             wind = "${(4 + (loc.longitude.toInt() % 12)).absoluteValue} mph",
+                             uvIndex = if (isWarm) "5 Moderate" else "2 Low",
+                             forecast = listOf(
+                                 ForecastDay("Today", "${tempVal}°", if (isWarm) "Sunny" else "Windy"),
+                                 ForecastDay("Tomorrow", "${tempVal + 1}°", if (isWarm) "Sunny" else "Cloudy"),
+                                 ForecastDay("Next", "${tempVal - 2}°", "Partly Cloudy")
+                             )
+                        )
+                    }
                 } else {
                     _locationWeather.value = WeatherData(
                          city = "Local Station (Simulated GPS)",
@@ -329,33 +355,29 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             ttsEngine = null
         }
 
-        // Prepopulate premium WorldMonitor News
-        _newsFeed.value = listOf(
-            NewsArticle(
-                id = 1,
-                title = "WorldMonitor: Atmospheric Shift Recorded globally",
-                category = "CLIMATE",
-                source = "www.worldmonitor.app",
-                summary = "Live monitoring nodes across San Jose and Paris show a steady positive temperature index shift with crisp morning air currents.",
-                time = "10m ago"
-            ),
-            NewsArticle(
-                id = 2,
-                title = "Next-Gen AI Voice integration achieves human warmth",
-                category = "TECHNOLOGY",
-                source = "www.worldmonitor.app",
-                summary = "Recent research logs details on synthesized voice harmonics, which configure higher pitches and slightly slower syllable rates for deep comfort.",
-                time = "45m ago"
-            ),
-            NewsArticle(
-                id = 3,
-                title = "Apple Core Systems release dynamic widget grids",
-                category = "SYSTEMS",
-                source = "www.worldmonitor.app",
-                summary = "Sleek card styles offering real-time clocks, weather descriptions, and unified action feeds are highly adopted across iOS system themes.",
-                time = "2h ago"
-            )
-        )
+        // Fetch News
+        viewModelScope.launch {
+            try {
+                val response = com.example.api.PublicRetrofitClient.service.getNewsHeadlines()
+                val apiArticles = response.articles.mapIndexed { index, apiArt ->
+                    NewsArticle(
+                        id = index,
+                        title = apiArt.title ?: "No Title",
+                        category = "GLOBAL",
+                        source = apiArt.source?.name ?: "News API",
+                        summary = apiArt.description ?: "Click to view full coverage.",
+                        time = "Recent"
+                    )
+                }.take(10)
+                if (apiArticles.isNotEmpty()) {
+                    _newsFeed.value = apiArticles
+                }
+            } catch (e: Exception) {
+                _newsFeed.value = listOf(
+                    NewsArticle(1, "WorldMonitor Data Unavailable", "SYSTEM", "Offline", "Unable to fetch global news dynamically.", "1m ago")
+                )
+            }
+        }
     }
 
     // ----------------------------------------------------
