@@ -111,10 +111,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val _isVoiceMuted = MutableStateFlow(false)
     val isVoiceMuted: StateFlow<Boolean> = _isVoiceMuted.asStateFlow()
 
-    private val _voicePitch = MutableStateFlow(1.35f) // High pitch is sweeter and more charming
+    private val _voicePitch = MutableStateFlow(1.4f) // High pitch for young charming voice
     val voicePitch: StateFlow<Float> = _voicePitch.asStateFlow()
 
-    private val _voiceSpeed = MutableStateFlow(0.92f) // Slightly slower rate for warmth and clarity
+    private val _voiceSpeed = MutableStateFlow(0.85f) // Slower for soft delivery
     val voiceSpeed: StateFlow<Float> = _voiceSpeed.asStateFlow()
 
     // ----------------------------------------------------
@@ -400,10 +400,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     try {
                         val voices = t.voices
                         if (voices != null) {
+                            // Sort and find a charming/soft female voice if present
                             val premiumFemale = voices.firstOrNull { voice ->
-                                voice.name.contains("female", ignoreCase = true) ||
-                                voice.name.contains("en-us-x-sfg", ignoreCase = true) ||
-                                voice.name.contains("en-gb-x-sfg", ignoreCase = true)
+                                val name = voice.name.lowercase(Locale.US)
+                                (name.contains("en-us") || name.contains("en-gb")) &&
+                                (name.contains("female") || name.contains("-sfg") || name.contains("-f-") || name.contains("-rjs"))
                             }
                             if (premiumFemale != null) {
                                 t.voice = premiumFemale

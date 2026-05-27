@@ -28,9 +28,9 @@ object ElevenLabsClient {
             }
         """.trimIndent().toRequestBody("application/json".toMediaType())
 
-        // Using Rachel voice ID (default high quality female voice)
+        // Using provided default voice ID
         val request = Request.Builder()
-            .url("https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM")
+            .url("https://api.elevenlabs.io/v1/text-to-speech/LhCTLWUhq2ShkW2pU2VZ")
             .addHeader("xi-api-key", apiKey)
             .addHeader("Accept", "audio/mpeg")
             .post(requestBody)
