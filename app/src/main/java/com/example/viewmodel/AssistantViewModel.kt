@@ -104,6 +104,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     // ----------------------------------------------------
     private var ttsEngine: TextToSpeech? = null
     private var mediaPlayer: android.media.MediaPlayer? = null
+    private var speakJob: kotlinx.coroutines.Job? = null
     
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
@@ -460,8 +461,17 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun speak(markdownText: String) {
         if (_isVoiceMuted.value) return
-        viewModelScope.launch {
-            stopSpeaking()
+        speakJob?.cancel()
+        speakJob = viewModelScope.launch {
+            try {
+                ttsEngine?.stop()
+            } catch (e: Throwable) {}
+            try {
+                mediaPlayer?.reset()
+                mediaPlayer?.release()
+            } catch (e: Throwable) {} finally {
+                mediaPlayer = null
+            }
             delay(100)
             
             // Normalize plain text by removing Markdown characters, code snippets, etc. for cleaner synthesized speech
@@ -494,7 +504,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             _isSpeaking.value = false
                         }
                         setOnPreparedListener { mp ->
-                            mp.start()
+                            try {
+                                mp.start()
+                            } catch(e: Exception) { e.printStackTrace() }
                         }
                         prepareAsync()
                     }
@@ -525,17 +537,20 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun stopSpeaking() {
+        speakJob?.cancel()
+        speakJob = null
         try {
             ttsEngine?.stop()
         } catch (e: Throwable) {
             // ignore
         }
         try {
-            mediaPlayer?.stop()
+            mediaPlayer?.reset()
             mediaPlayer?.release()
-            mediaPlayer = null
         } catch (e: Throwable) {
             // ignore
+        } finally {
+            mediaPlayer = null
         }
         _isSpeaking.value = false
     }
@@ -906,6 +921,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     override fun onCleared() {
         super.onCleared()
+        stopSpeaking()
         try {
             ttsEngine?.shutdown()
         } catch (e: Throwable) {
