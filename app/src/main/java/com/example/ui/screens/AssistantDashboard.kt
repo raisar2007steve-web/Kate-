@@ -74,7 +74,7 @@ enum class SystemUiState {
 }
 
 enum class IosLaunchApp {
-    KATE_CHAT, WEATHER, NEWS, WORLD_MAP, REMINDERS, NOTES
+    KATE_CHAT, WEATHER, NEWS, WORLD_MAP, REMINDERS, NOTES, MULTI_AGENTS
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -156,6 +156,7 @@ fun AssistantDashboard(
                                 IosLaunchApp.WORLD_MAP -> WorldMapAppView(viewModel)
                                 IosLaunchApp.REMINDERS -> IosRemindersAppView(viewModel)
                                 IosLaunchApp.NOTES -> IosNotesAppView(viewModel)
+                                IosLaunchApp.MULTI_AGENTS -> MultiAgentsAppView(viewModel)
                             }
                         }
                     }
@@ -498,6 +499,8 @@ fun IosHomeScreenGrid(
             HomeScreenAppIcon(label = "Reminders", iconVector = Icons.Default.ListAlt, color = Color(0xFF34C759), onClick = { onAppLaunch(IosLaunchApp.REMINDERS) })
             Spacer(modifier = Modifier.width(30.dp))
             HomeScreenAppIcon(label = "Notes", iconVector = Icons.Default.StickyNote2, color = Color(0xFFFFCC00), onClick = { onAppLaunch(IosLaunchApp.NOTES) })
+            Spacer(modifier = Modifier.width(30.dp))
+            HomeScreenAppIcon(label = "AI Agents", iconVector = Icons.Default.Groups, color = Color(0xFF9C27B0), onClick = { onAppLaunch(IosLaunchApp.MULTI_AGENTS) })
         }
     }
 }
@@ -2870,6 +2873,131 @@ fun WeatherAppView(viewModel: AssistantViewModel) {
 
 @Composable
 fun WorldMapAppView(viewModel: AssistantViewModel) {
+    val locationWeather by viewModel.locationWeather.collectAsStateWithLifecycle()
+    
+    // Extract lat/long from the weather data title or just use a default
+    // In AssistantViewModel, locationWeather.city is formatted as "Lat: XX.XX, Lon: YY.YY"
+    var latitude by remember { mutableDoubleStateOf(0.0) }
+    var longitude by remember { mutableDoubleStateOf(0.0) }
+    
+    LaunchedEffect(locationWeather) {
+        val cityStr = locationWeather?.city
+        if (cityStr != null && cityStr.startsWith("Lat:")) {
+            try {
+                // Parse "Lat: XX.XX, Lon: YY.YY"
+                val parts = cityStr.split(",")
+                val latStr = parts[0].replace("Lat:", "").trim()
+                val lonStr = parts[1].replace("Lon:", "").trim()
+                latitude = latStr.toDouble()
+                longitude = lonStr.toDouble()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF1E2124))
+    ) {
+        // App Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Live World Map",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
+                )
+                Text(
+                    text = "OSMDROID GLOBAL EXPLORER",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF30B0FF),
+                    letterSpacing = 0.5.sp
+                )
+            }
+
+            IconButton(
+                onClick = { 
+                    viewModel.updateWeatherWithCurrentLocation()
+                },
+                colors = IconButtonDefaults.iconButtonColors(containerColor = Color.White.copy(alpha = 0.12f)),
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MyLocation,
+                    contentDescription = "Locate Me",
+                    tint = Color(0xFF30B0FF),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+        
+        // Map Container
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+        ) {
+            OsmdroidMapView(
+                modifier = Modifier.fillMaxSize(),
+                latitude = latitude,
+                longitude = longitude
+            )
+            
+            // Location Badge Overlay
+            if (locationWeather != null && latitude != 0.0) {
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(16.dp)
+                        .padding(bottom = 24.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.7f)),
+                    border = BorderStroke(1.dp, Color(0xFF30B0FF).copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GpsFixed,
+                            contentDescription = "Lock",
+                            tint = Color(0xFF30B0FF),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "Live Target Locked",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "LAT: ${String.format(java.util.Locale.US, "%.4f", latitude)}\nLON: ${String.format(java.util.Locale.US, "%.4f", longitude)}",
+                                fontSize = 10.sp,
+                                color = Color.White.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun WorldMapAppView_OLD(viewModel: AssistantViewModel) {
     var mapModeByInternet by remember { mutableStateOf(false) } // false = Offline India, true = World Map Online
     val locationWeather by viewModel.locationWeather.collectAsStateWithLifecycle()
     

@@ -40,7 +40,39 @@ data class NewsSourceDto(
     val name: String?
 )
 
+data class OpenWeatherResponse(
+    val main: OpenWeatherMain,
+    val weather: List<OpenWeatherCondition>,
+    val wind: OpenWeatherWind,
+    val name: String
+)
+
+data class OpenWeatherMain(
+    val temp: Double,
+    val humidity: Int,
+    val temp_max: Double,
+    val temp_min: Double
+)
+
+data class OpenWeatherCondition(
+    val main: String,
+    val description: String,
+    val icon: String
+)
+
+data class OpenWeatherWind(
+    val speed: Double
+)
+
 interface PublicApiService {
+    @GET("https://api.openweathermap.org/data/2.5/weather")
+    suspend fun getOpenWeather(
+        @Query("lat") lat: Double,
+        @Query("lon") lon: Double,
+        @Query("appid") apiKey: String,
+        @Query("units") units: String = "metric" // Or imperial
+    ): OpenWeatherResponse
+
     @GET("https://api.open-meteo.com/v1/forecast")
     suspend fun getCurrentWeather(
         @Query("latitude") lat: Double,

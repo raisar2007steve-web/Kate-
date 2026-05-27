@@ -80,6 +80,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val _isAiLoading = MutableStateFlow(false)
     val isAiLoading: StateFlow<Boolean> = _isAiLoading.asStateFlow()
 
+    private val _multiAgentMessages = MutableStateFlow<List<com.example.api.NvidiaChatMessage>>(emptyList())
+    val multiAgentMessages: StateFlow<List<com.example.api.NvidiaChatMessage>> = _multiAgentMessages.asStateFlow()
+
+    private val _isMultiAgentLoading = MutableStateFlow(false)
+    val isMultiAgentLoading: StateFlow<Boolean> = _isMultiAgentLoading.asStateFlow()
+
     private val _aiError = MutableStateFlow<String?>(null)
     val aiError: StateFlow<String?> = _aiError.asStateFlow()
 
@@ -97,6 +103,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     // Text-To-Speech (TTS) Voice Engine States & Settings
     // ----------------------------------------------------
     private var ttsEngine: TextToSpeech? = null
+    private var mediaPlayer: android.media.MediaPlayer? = null
     
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
@@ -263,25 +270,26 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     val lon = loc.longitude
                     
                     try {
-                        val response = com.example.api.PublicRetrofitClient.service.getCurrentWeather(lat, lon, true)
-                        val current = response.current_weather
-                        if (current != null) {
-                            val isWarm = current.temperature > 18
-                            _locationWeather.value = WeatherData(
-                                 city = "Lat: ${String.format(Locale.US, "%.2f", lat)}, Lon: ${String.format(Locale.US, "%.2f", lon)}",
-                                 temperature = "${current.temperature}°",
-                                 condition = if (current.weathercode < 3) "Clear/Partly Cloudy" else "Cloudy/Rainy",
-                                 description = "Live detected weather via Open-Meteo. Condition code: ${current.weathercode}",
-                                 humidity = "N/A", // OpenMeteo current_weather doesn't give humidity by default, mock it 
-                                 wind = "${current.windspeed} km/h",
-                                 uvIndex = if (isWarm) "Moderate" else "Low",
-                                 forecast = listOf(
-                                     ForecastDay("Today", "${current.temperature}°", if (current.weathercode < 3) "Sunny" else "Cloudy"),
-                                     ForecastDay("Tomorrow", "${current.temperature + 1}°", "Partly Cloudy"),
-                                     ForecastDay("Next", "${current.temperature - 2}°", "Clear")
-                                 )
-                            )
-                        }
+                        val apiKey = "e10d2eed85e0b38945f67ca247034aa3"
+                        val response = com.example.api.PublicRetrofitClient.service.getOpenWeather(lat, lon, apiKey)
+                        
+                        val weatherCondition = response.weather.firstOrNull()
+                        val isWarm = response.main.temp > 18
+                        
+                        _locationWeather.value = WeatherData(
+                             city = response.name.ifEmpty { "Lat: ${String.format(Locale.US, "%.2f", lat)}, Lon: ${String.format(Locale.US, "%.2f", lon)}" },
+                             temperature = "${response.main.temp.toInt()}°",
+                             condition = weatherCondition?.main ?: "Unknown",
+                             description = "Live detected weather via OpenWeather. ${weatherCondition?.description?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.US) else it.toString() } ?: ""}",
+                             humidity = "${response.main.humidity}%", 
+                             wind = "${response.wind.speed} m/s",
+                             uvIndex = if (isWarm) "Moderate" else "Low",
+                             forecast = listOf(
+                                 ForecastDay("Today", "${response.main.temp_max.toInt()}° / ${response.main.temp_min.toInt()}°", weatherCondition?.main ?: "-"),
+                                 ForecastDay("Tomorrow", "${(response.main.temp_max + 1).toInt()}°", weatherCondition?.main ?: "-"),
+                                 ForecastDay("Next", "${(response.main.temp_max - 2).toInt()}°", "Clear")
+                             )
+                        )
                     } catch(e: Exception) {
                         e.printStackTrace()
                         val latStr = String.format(Locale.US, "%.3f", loc.latitude)
@@ -469,14 +477,48 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 cleanText = cleanText.take(450) + "... [Full response logged below on-screen]."
             }
 
+            var successCloud = false
             try {
-                ttsEngine?.let { t ->
-                    applyVoiceParameters()
-                    t.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "KATE_SPEECH_UTTERANCE")
+                val apiKey = "sk_44bb7f3330a83682767510817b6681655a2f7bf9cf1a4a9e"
+                val bytes = com.example.api.ElevenLabsClient.fetchVoiceBytes(cleanText, apiKey)
+                if (bytes != null && bytes.isNotEmpty()) {
+                    val tempFile = java.io.File(getApplication<Application>().cacheDir, "cloud_tts.mp3")
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        tempFile.writeBytes(bytes)
+                    }
+                    
+                    mediaPlayer = android.media.MediaPlayer().apply {
+                        setDataSource(tempFile.absolutePath)
+                        setOnCompletionListener {
+                            _isSpeaking.value = false
+                        }
+                        setOnPreparedListener { mp ->
+                            mp.start()
+                        }
+                        prepareAsync()
+                    }
                     _isSpeaking.value = true
+                    successCloud = true
                 }
-            } catch (e: Throwable) {
-                _isSpeaking.value = false
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            if (!successCloud) {
+                // SHOW WARN MESSAGE
+                viewModelScope.launch {
+                    chatRepository.insert(com.example.data.ChatMessage(role = "model", text = "⚠️ Cloud voice service unavailable. Falling back to local TTS engine."))
+                }
+
+                try {
+                    ttsEngine?.let { t ->
+                        applyVoiceParameters()
+                        t.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "KATE_SPEECH_UTTERANCE")
+                        _isSpeaking.value = true
+                    }
+                } catch (e: Throwable) {
+                    _isSpeaking.value = false
+                }
             }
         }
     }
@@ -484,6 +526,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun stopSpeaking() {
         try {
             ttsEngine?.stop()
+        } catch (e: Throwable) {
+            // ignore
+        }
+        try {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+            mediaPlayer = null
         } catch (e: Throwable) {
             // ignore
         }
@@ -561,6 +610,51 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             chatRepository.clearHistory()
             _aiError.value = null
             stopSpeaking()
+        }
+    }
+
+    fun sendMultiAgentMessage(prompt: String, agentModel: String, agentRole: String) {
+        val trimmedPrompt = prompt.trim()
+        if (trimmedPrompt.isEmpty()) return
+
+        val userMessage = com.example.api.NvidiaChatMessage(role = "user", content = prompt)
+        _multiAgentMessages.value = _multiAgentMessages.value + userMessage
+        
+        viewModelScope.launch {
+            _isMultiAgentLoading.value = true
+            
+            try {
+                // Add a system instruction using developer role for Nvidia NIM usually
+                val systemMessage = com.example.api.NvidiaChatMessage(
+                    role = "user", 
+                    content = "System instruction for you: You are $agentRole. Please act specifically according to your capability."
+                )
+                
+                val apiMessages = mutableListOf<com.example.api.NvidiaChatMessage>()
+                apiMessages.add(systemMessage)
+                apiMessages.addAll(_multiAgentMessages.value)
+                
+                val request = com.example.api.NvidiaChatRequest(
+                    model = agentModel,
+                    messages = apiMessages
+                )
+                
+                val apiKey = "Bearer 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"
+                val response = com.example.api.NvidiaRetrofitClient.service.generateContent(
+                    authorization = apiKey,
+                    request = request
+                )
+                
+                val responseText = response.choices?.firstOrNull()?.message?.content ?: "No response"
+                val botMessage = com.example.api.NvidiaChatMessage(role = "assistant", content = responseText)
+                _multiAgentMessages.value = _multiAgentMessages.value + botMessage
+            } catch (e: Exception) {
+                e.printStackTrace()
+                val errorMsg = com.example.api.NvidiaChatMessage(role = "assistant", content = "Error communicating with agent: ${e.message}")
+                _multiAgentMessages.value = _multiAgentMessages.value + errorMsg
+            } finally {
+                _isMultiAgentLoading.value = false
+            }
         }
     }
 

@@ -10,7 +10,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FilterVintage
+import androidx.compose.material.icons.filled.Cyclone
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,22 +62,22 @@ fun SplashScreen() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Huawei red logo placeholder using Canvas or Box
+        // Kate OS logo
         Box(
             modifier = Modifier
                 .size(80.dp),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Default.FilterVintage, // closest to red lotus petals
-                contentDescription = "Huawei Logo",
-                tint = Color(0xFFE50012), // Huawei Red
+                imageVector = Icons.Default.Cyclone, // Kate Cyclone icon
+                contentDescription = "Kate OS Logo",
+                tint = Color(0xFF00F0FF), // Kate Cyan
                 modifier = Modifier.size(72.dp)
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "HUAWEI",
+            text = "KATE OS",
             color = Color.White,
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
@@ -92,7 +92,7 @@ fun SplashScreen() {
             letterSpacing = 1.sp
         )
         Text(
-            text = "Android",
+            text = "Starly Tech",
             color = Color.White,
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
