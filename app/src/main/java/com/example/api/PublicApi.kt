@@ -64,6 +64,24 @@ data class OpenWeatherWind(
     val speed: Double
 )
 
+data class OpenWeatherForecastResponse(
+    val list: List<OpenWeatherForecastItem>,
+    val city: OpenWeatherForecastCity
+)
+
+data class OpenWeatherForecastItem(
+    val dt: Long,
+    val main: OpenWeatherMain,
+    val weather: List<OpenWeatherCondition>,
+    val wind: OpenWeatherWind,
+    val dt_txt: String
+)
+
+data class OpenWeatherForecastCity(
+    val name: String,
+    val country: String
+)
+
 interface PublicApiService {
     @GET("https://api.openweathermap.org/data/2.5/weather")
     suspend fun getOpenWeather(
@@ -72,6 +90,14 @@ interface PublicApiService {
         @Query("appid") apiKey: String,
         @Query("units") units: String = "metric" // Or imperial
     ): OpenWeatherResponse
+
+    @GET("https://api.openweathermap.org/data/2.5/forecast")
+    suspend fun getOpenWeatherForecast(
+        @Query("lat") lat: Double,
+        @Query("lon") lon: Double,
+        @Query("appid") apiKey: String,
+        @Query("units") units: String = "metric"
+    ): OpenWeatherForecastResponse
 
     @GET("https://api.open-meteo.com/v1/forecast")
     suspend fun getCurrentWeather(
@@ -82,7 +108,24 @@ interface PublicApiService {
 
     @GET
     suspend fun getNewsHeadlines(@Url url: String = "https://saurav.tech/NewsAPI/top-headlines/category/general/us.json"): NewsApiResponse
+
+    @GET
+    suspend fun getPipedTrending(@Url url: String): List<PipedTrendingItem>
 }
+
+data class PipedTrendingItem(
+    val title: String? = null,
+    val url: String? = null,
+    val thumbnail: String? = null,
+    val uploaderName: String? = null,
+    val uploaderUrl: String? = null,
+    val uploaderAvatar: String? = null,
+    val uploadedDate: String? = null,
+    val shortDescription: String? = null,
+    val duration: Long? = 0,
+    val views: Long? = 0,
+    val uploaded: Long? = 0
+)
 
 object PublicRetrofitClient {
     val service: PublicApiService by lazy {

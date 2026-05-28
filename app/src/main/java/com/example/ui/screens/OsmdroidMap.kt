@@ -24,25 +24,10 @@ fun OsmdroidMapView(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    
-    val mapView = remember {
-        Configuration.getInstance().userAgentValue = context.packageName
-        MapView(context).apply {
-            setTileSource(TileSourceFactory.MAPNIK)
-            setMultiTouchControls(true)
-            controller.setZoom(15.0)
-            val startPoint = GeoPoint(latitude, longitude)
-            controller.setCenter(startPoint)
-            
-            val marker = Marker(this)
-            marker.position = startPoint
-            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-            marker.title = "Current Location"
-            overlays.add(marker)
-        }
-    }
+    var mapViewRef by remember { mutableStateOf<MapView?>(null) }
 
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, mapViewRef) {
+        val mapView = mapViewRef ?: return@DisposableEffect onDispose {}
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> mapView.onResume()
@@ -57,23 +42,39 @@ fun OsmdroidMapView(
         }
     }
     
-    LaunchedEffect(latitude, longitude) {
-        if (latitude != 0.0 || longitude != 0.0) {
-            val geoPoint = GeoPoint(latitude, longitude)
-            mapView.controller.animateTo(geoPoint)
-            
-            mapView.overlays.filterIsInstance<Marker>().forEach { mapView.overlays.remove(it) }
-            val marker = Marker(mapView)
-            marker.position = geoPoint
-            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-            marker.title = "Current Location"
-            mapView.overlays.add(marker)
-            mapView.invalidate()
-        }
-    }
-
     AndroidView(
-        factory = { mapView },
+        factory = { ctx ->
+            Configuration.getInstance().userAgentValue = ctx.packageName
+            MapView(ctx).apply {
+                setTileSource(TileSourceFactory.MAPNIK)
+                setMultiTouchControls(true)
+                controller.setZoom(15.0)
+                val startPoint = GeoPoint(latitude, longitude)
+                controller.setCenter(startPoint)
+                
+                val marker = Marker(this)
+                marker.position = startPoint
+                marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                marker.title = "Current Location"
+                overlays.add(marker)
+                
+                mapViewRef = this
+            }
+        },
+        update = { mapView ->
+            if (latitude != 0.0 || longitude != 0.0) {
+                val geoPoint = GeoPoint(latitude, longitude)
+                mapView.controller.animateTo(geoPoint)
+                
+                mapView.overlays.filterIsInstance<Marker>().forEach { mapView.overlays.remove(it) }
+                val marker = Marker(mapView)
+                marker.position = geoPoint
+                marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                marker.title = "Current Location"
+                mapView.overlays.add(marker)
+                mapView.invalidate()
+            }
+        },
         modifier = modifier.fillMaxSize()
     )
 }
