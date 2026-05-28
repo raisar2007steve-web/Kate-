@@ -1476,7 +1476,16 @@ fun NewsAppView(viewModel: AssistantViewModel) {
 
     val categories = listOf("All", "Sports", "Entertainment", "Gaming", "Real Life", "Political", "Food")
     var selectedCategory by remember { mutableStateOf(categories[0]) }
-    var isWebViewSupported by remember { mutableStateOf(true) }
+    val initialWebViewSupported = remember {
+        try {
+            Class.forName("android.webkit.WebView")
+            android.webkit.CookieManager.getInstance()
+            true
+        } catch (e: Throwable) {
+            false
+        }
+    }
+    var isWebViewSupported by remember { mutableStateOf(initialWebViewSupported) }
 
     val seedArticles = remember {
         listOf(
@@ -1963,12 +1972,14 @@ fun NewsAppView(viewModel: AssistantViewModel) {
                                             javaScriptEnabled = true
                                             domStorageEnabled = true
                                             mediaPlaybackRequiresUserGesture = false
+                                            userAgentString = "Mozilla/5.0 (Linux; Android 13; SM-K970) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
                                         }
-                                        val videoHtml = "<!DOCTYPE html><html><body style='margin:0;padding:0;background-color:#000;'><iframe width='100%' height='100%' src='https://www.youtube.com/embed/${currentPlayingVideoId}?autoplay=1&mute=1&playsinline=1' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe></body></html>"
-                                        loadDataWithBaseURL("https://www.youtube.com", videoHtml, "text/html", "UTF-8", null)
+                                        loadUrl("https://www.youtube.com/embed/${currentPlayingVideoId}?autoplay=1&mute=1&playsinline=1&enablejsapi=1")
                                     }
                                 } catch (e: Throwable) {
-                                    isWebViewSupported = false
+                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                        isWebViewSupported = false
+                                    }
                                     android.view.View(ctx).apply {
                                         tag = "FALLBACK"
                                     }
@@ -1980,12 +1991,13 @@ fun NewsAppView(viewModel: AssistantViewModel) {
                                         val lastLoadedId = webView.tag as? String
                                         if (lastLoadedId != currentPlayingVideoId) {
                                             webView.tag = currentPlayingVideoId
-                                            val videoHtml = "<!DOCTYPE html><html><body style='margin:0;padding:0;background-color:#000;'><iframe width='100%' height='100%' src='https://www.youtube.com/embed/${currentPlayingVideoId}?autoplay=1&mute=1&playsinline=1' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe></body></html>"
-                                            webView.loadDataWithBaseURL("https://www.youtube.com", videoHtml, "text/html", "UTF-8", null)
+                                            webView.loadUrl("https://www.youtube.com/embed/${currentPlayingVideoId}?autoplay=1&mute=1&playsinline=1&enablejsapi=1")
                                         }
                                     }
                                 } catch (e: Throwable) {
-                                    isWebViewSupported = false
+                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                        isWebViewSupported = false
+                                    }
                                 }
                             },
                             modifier = Modifier.fillMaxSize()
@@ -5649,7 +5661,16 @@ fun FallbackComposePlayer(
 
 @Composable
 fun InstagramSidePanel() {
-    var isLiveUrlOption by remember { mutableStateOf(true) }
+    val isInstagramWebViewSupported = remember {
+        try {
+            Class.forName("android.webkit.WebView")
+            android.webkit.CookieManager.getInstance()
+            true
+        } catch (e: Throwable) {
+            false
+        }
+    }
+    var isLiveUrlOption by remember { mutableStateOf(isInstagramWebViewSupported) }
 
     Column(
         modifier = Modifier
