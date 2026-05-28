@@ -95,6 +95,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val _selectedAgentMode = MutableStateFlow(AgentCompanionMode.COMPANION)
     val selectedAgentMode: StateFlow<AgentCompanionMode> = _selectedAgentMode.asStateFlow()
 
+    private val _isStsModeActive = MutableStateFlow(false)
+    val isStsModeActive: StateFlow<Boolean> = _isStsModeActive.asStateFlow()
+    
     fun selectAgentMode(mode: AgentCompanionMode) {
         _selectedAgentMode.value = mode
     }
@@ -103,7 +106,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     // Text-To-Speech (TTS) Voice Engine States & Settings
     // ----------------------------------------------------
     private var ttsEngine: TextToSpeech? = null
-    private var mediaPlayer: android.media.MediaPlayer? = null
     private var speakJob: kotlinx.coroutines.Job? = null
     
     private val _isSpeaking = MutableStateFlow(false)
@@ -466,12 +468,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 ttsEngine?.stop()
             } catch (e: Throwable) {}
-            try {
-                mediaPlayer?.reset()
-                mediaPlayer?.release()
-            } catch (e: Throwable) {} finally {
-                mediaPlayer = null
-            }
             delay(100)
             
             // Normalize plain text by removing Markdown characters, code snippets, etc. for cleaner synthesized speech
@@ -488,50 +484,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 cleanText = cleanText.take(450) + "... [Full response logged below on-screen]."
             }
 
-            var successCloud = false
             try {
-                val apiKey = "sk_44bb7f3330a83682767510817b6681655a2f7bf9cf1a4a9e"
-                val bytes = com.example.api.ElevenLabsClient.fetchVoiceBytes(cleanText, apiKey)
-                if (bytes != null && bytes.isNotEmpty()) {
-                    val tempFile = java.io.File(getApplication<Application>().cacheDir, "cloud_tts.mp3")
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        tempFile.writeBytes(bytes)
-                    }
-                    
-                    mediaPlayer = android.media.MediaPlayer().apply {
-                        setDataSource(tempFile.absolutePath)
-                        setOnCompletionListener {
-                            _isSpeaking.value = false
-                        }
-                        setOnPreparedListener { mp ->
-                            try {
-                                mp.start()
-                            } catch(e: Exception) { e.printStackTrace() }
-                        }
-                        prepareAsync()
-                    }
+                ttsEngine?.let { t ->
+                    applyVoiceParameters()
+                    t.speak(cleanText, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "KATE_SPEECH_UTTERANCE")
                     _isSpeaking.value = true
-                    successCloud = true
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-
-            if (!successCloud) {
-                // SHOW WARN MESSAGE
-                viewModelScope.launch {
-                    chatRepository.insert(com.example.data.ChatMessage(role = "model", text = "⚠️ Cloud voice service unavailable. Falling back to local TTS engine."))
-                }
-
-                try {
-                    ttsEngine?.let { t ->
-                        applyVoiceParameters()
-                        t.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "KATE_SPEECH_UTTERANCE")
-                        _isSpeaking.value = true
-                    }
-                } catch (e: Throwable) {
-                    _isSpeaking.value = false
-                }
+            } catch (e: Throwable) {
+                _isSpeaking.value = false
             }
         }
     }
@@ -543,14 +503,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             ttsEngine?.stop()
         } catch (e: Throwable) {
             // ignore
-        }
-        try {
-            mediaPlayer?.reset()
-            mediaPlayer?.release()
-        } catch (e: Throwable) {
-            // ignore
-        } finally {
-            mediaPlayer = null
         }
         _isSpeaking.value = false
     }
@@ -695,6 +647,18 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 Content(parts = listOf(Part(text = msg.text)))
             } + Content(parts = listOf(Part(text = trimmedPrompt)))
 
+            // 0. BOSS RECOGNITION (STS MODE/GREETING)
+            if (trimmedPrompt.equals("daddy is home", ignoreCase = true) || trimmedPrompt.contains("daddy is home", ignoreCase = true)) {
+                _isStsModeActive.value = true
+                _isAiLoading.value = false
+                val news = getFallbackSummary("GLOBAL NEWS")
+                val formalWelcomeText = "**[KATE.OS // VIP PROTOCOL INITIATED]**\n\nWelcome back, Mr. Steve. Authentication confirmed and STS operational. Here is the short news of the day:\n\n$news"
+                val bossMsg = ChatMessage(role = "model", text = formalWelcomeText)
+                chatRepository.insert(bossMsg)
+                speak("Welcome back, Mr. Steve. Authentication confirmed and S T S operational. Here is the short news of the day. " + news)
+                return@launch
+            }
+
             // Trigger AI link
             if (!isApiKeyConfigured()) {
                 delay(1200) // realistic cognitive model processing latency
@@ -743,7 +707,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                                 "**[KATE.OS // COMPUTATIONAL CLASSICS RESEARCH]**\n\nThe quicksort algorithm was designed by British computer scientist Tony Hoare in 1959. It remains a historical pillar of modern computational efficiency and information sorting paradigms globally."
                             }
                             else -> {
-                                "Hello Steve! I've sketched an algorithm structure for you. Under **Companion Mode**, I recommend using pre-compiled array tools for efficiency, but I can also help you design cozy custom functions."
+                                val greeting = if (_isStsModeActive.value) "Boss" else "friend"
+                                "Hello $greeting! I've sketched an algorithm structure for you. Under **Companion Mode**, I recommend using pre-compiled array tools for efficiency, but I can also help you design cozy custom functions."
                             }
                         }
                     }
@@ -869,10 +834,17 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     "User's Live Location/GPS is currently idle (unqueried or pending permissions)."
                 }
 
+                val addressInstruction = if (_isStsModeActive.value) {
+                    "IMPORTANT: Authenticated STS Mode is active. You MUST address the user using professional metaphors such as 'Boss', 'Mr. Steve', 'Director', or 'Chief' intermittently in your response to show high respect and authorization."
+                } else {
+                    "IMPORTANT: Keep the user strictly anonymous. Do not use any names or specific titles to address the user yet, as they are not authenticated."
+                }
+
                 val systemInstruction = Content(
                     parts = listOf(
                         Part(
                             text = "You are KATE.OS. Your traits: Extremely sweet, calm, supportive, and highly capable. " +
+                                    addressInstruction + "\n" +
                                     "CRITICAL INSTRUCTIONS FOR EVERY RESPONSE:\n" +
                                     "1. DIRECT ANSWER: Address the very main content of the user's question immediately. NEVER introduce yourself. NEVER state your mode or persona constraint (e.g. do not say 'I am in Analyst Mode' or 'As an AI').\n" +
                                     "2. VISUAL CARD SEPARATION: You MUST format your response into visually distinct sections using clean Markdown headers. This enables our UI cards to separate the text, charts, and key points.\n" +

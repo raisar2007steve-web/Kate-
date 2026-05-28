@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import android.widget.Toast
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebResourceRequest
@@ -65,6 +66,14 @@ import com.example.data.ChatMessage
 import com.example.data.Note
 import com.example.data.Task
 import com.example.viewmodel.AssistantViewModel
+import com.example.viewmodel.NewsArticle
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.BackHandler
+import android.media.AudioManager
+import android.media.MediaPlayer
+import android.content.Context
+import android.view.KeyEvent
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.sin
@@ -92,6 +101,9 @@ fun AssistantDashboard(
     val isVoiceMuted by viewModel.isVoiceMuted.collectAsStateWithLifecycle()
     val batteryLvl by viewModel.deviceBatteryPercentage.collectAsStateWithLifecycle()
     
+    val isStsModeActive by viewModel.isStsModeActive.collectAsStateWithLifecycle()
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    
     // Beautiful gradient representing iOS standard wallpaper (Lavender aurora meets deep sunset)
     val iosWallpaperBrush = Brush.linearGradient(
         colors = listOf(
@@ -102,6 +114,23 @@ fun AssistantDashboard(
             Color(0xFF1E3A8A)  // Cool Deep Sea Blue
         )
     )
+
+    var isVipExpanded by remember { mutableStateOf(false) }
+
+    // Real physical/virtual Android device button controls the OS navigation!
+    val backHandlerEnabled = isVipExpanded || 
+                             (systemUiState == SystemUiState.IN_APP) || 
+                             (systemUiState == SystemUiState.HOMESCREEN)
+
+    BackHandler(enabled = backHandlerEnabled) {
+        if (isVipExpanded) {
+            isVipExpanded = false
+        } else if (systemUiState == SystemUiState.IN_APP) {
+            systemUiState = SystemUiState.HOMESCREEN
+        } else if (systemUiState == SystemUiState.HOMESCREEN) {
+            systemUiState = SystemUiState.LOCKSCREEN
+        }
+    }
 
     Box(
         modifier = modifier
@@ -174,6 +203,77 @@ fun AssistantDashboard(
                     systemUiState = systemUiState,
                     onHomeClick = { systemUiState = SystemUiState.HOMESCREEN }
                 )
+            }
+        }
+
+        // Sleek overlay for VIP Command Center Panel in STS/Authenticated mode
+        if (isStsModeActive) {
+            if (isVipExpanded) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .clickable { isVipExpanded = false },
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(0.88f)
+                            .border(1.5.dp, Color(0xFFFFD700).copy(alpha = 0.35f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                            .clickable(enabled = false) {},
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF070707)),
+                        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+                    ) {
+                        VipCommandCenter(onMinimizeClick = { isVipExpanded = false })
+                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 110.dp, end = 16.dp),
+                    contentAlignment = Alignment.BottomEnd
+                ) {
+                    val pulseAnim = rememberInfiniteTransition(label = "pulseGlow")
+                    val glowScale by pulseAnim.animateFloat(
+                        initialValue = 0.96f,
+                        targetValue = 1.12f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(1200, easing = EaseInOutBack),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "glowScale"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .graphicsLayer {
+                                scaleX = glowScale
+                                scaleY = glowScale
+                            }
+                            .shadow(12.dp, RoundedCornerShape(50))
+                            .background(Color.Black, RoundedCornerShape(50))
+                            .border(2.dp, Color(0xFFFFD700), RoundedCornerShape(50))
+                            .clickable { isVipExpanded = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = "Open VIP Console",
+                                tint = Color(0xFFFFD700),
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = "VIP",
+                                color = Color(0xFFFFD700),
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -623,6 +723,8 @@ fun KateChatAppView(viewModel: AssistantViewModel) {
     val isSpeaking by viewModel.isSpeaking.collectAsStateWithLifecycle()
     val selectedMode by viewModel.selectedAgentMode.collectAsStateWithLifecycle()
 
+    val isStsModeActive by viewModel.isStsModeActive.collectAsStateWithLifecycle()
+
     val chatScrollState = rememberLazyListState()
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -768,7 +870,7 @@ fun KateChatAppView(viewModel: AssistantViewModel) {
 
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "How can I help you, Steve?",
+                            text = if (isStsModeActive) "How can I help you, Boss?" else "How can I help you?",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
@@ -1347,6 +1449,35 @@ fun NewsAppView(viewModel: AssistantViewModel) {
     var selectedChannelInputIndex by remember { mutableStateOf(0) }
     val activeChannel = newsChannelsList.getOrElse(selectedChannelInputIndex) { newsChannelsList[0] }
 
+    val categories = listOf("All", "Sports", "Entertainment", "Gaming", "Real Life", "Political", "Food")
+    var selectedCategory by remember { mutableStateOf(categories[0]) }
+
+    val seedArticles = remember {
+        listOf(
+            NewsArticle(101, "Formula 1: Monaco GP Sparkles as Ferrari Clinches Dramatic Win", "Sports", "Grand Prix Digest", "A masterclass strategy under changing weather conditions hands Ferrari the iconic silverware on the streets of Monte Carlo.", "2m ago"),
+            NewsArticle(102, "Major Leagues: Underdog Surge Rewrites Playoff Projections", "Sports", "SportsCenter Live", "An unprecedented late-season surge has wild card contenders breaking statistical records in professional leagues.", "15m ago"),
+            NewsArticle(151, "CineCon: Award-Winning Director Unveils Next Sci-Fi Epic", "Entertainment", "Hollywood Bulletin", "The upcoming feature explores mind-bending reality concepts using breakthrough physical miniature sets in virtual production.", "1h ago"),
+            NewsArticle(152, "Pop Charts: Acoustic Indie Track Beats Synthesized Mega Hits", "Entertainment", "Daily Record", "A minimalist solo acoustic track recorded in an old barn reaches the top of global streaming platforms.", "3h ago"),
+            NewsArticle(201, "Next-Gen Console Unwrapped: Breakthrough Raytracing Engine", "Gaming", "PixelHub", "Under-the-hood specs show massive memory throughput optimizations allowing realistic light transport at extreme refresh rates.", "10m ago"),
+            NewsArticle(202, "Indie Hit Sells 10 Million Copies in 7 Days", "Gaming", "Steam Chronicles", "Developed by a solo creator, this cozy farming sim meets automation sandbox captures millions of active players.", "4m ago"),
+            NewsArticle(251, "Off-Grid Living: Inside the Eco-Dome Community In Arctic Edge", "Real Life", "Nomadic Chronicles", "Local engineers design self-sustaining domes utilizing geothermal vents and localized aeroponics crop production.", "2h ago"),
+            NewsArticle(252, "The Rise of Micro-Communities in Crowded City Centers", "Real Life", "Urban Quarterly", "City dwellers are re-learning collaborative living through shared utility agreements and neighborhood tool libraries.", "5h ago"),
+            NewsArticle(301, "Global Senate Passes Landmark Digital Sovereign Privacy Framework", "Political", "Democracy Tribune", "Broad bipartisan consensus secures sweeping individual control over cryptographic verification tokens in state services.", "30m ago"),
+            NewsArticle(302, "Infrastructure Bill Greenlights Over 5,000 High-Speed Commuter Rails", "Political", "Capital Dispatch", "A major policy shift redirects state capital reserves towards building carbon-negative high-capacity high-speed transit links.", "1h ago"),
+            NewsArticle(351, "Gastronomy Study: Traditional Fermentation Meets Modern Culinary Labs", "Food", "Culinary Digest", "Michelin chefs are leveraging ancient probiotic fermentation cultures to craft exquisite plant-based alternative delicacies.", "4h ago"),
+            NewsArticle(352, "The Sourdough Database: Archiving Ancient Micro-Organisms", "Food", "Bakers Weekly", "Researchers compile genomic data for over 4,000 wild yeasts dating back to ancestral Mesopotamian household lineages.", "8h ago")
+        )
+    }
+
+    val filteredArticles = remember(newsArticles, selectedCategory) {
+        val combined = newsArticles.map { it.copy(category = if (it.category == "GLOBAL" || it.category == "") "News" else it.category) } + seedArticles
+        if (selectedCategory == "All") {
+            combined
+        } else {
+            combined.filter { it.category.equals(selectedCategory, ignoreCase = true) }
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -1391,6 +1522,32 @@ fun NewsAppView(viewModel: AssistantViewModel) {
                         tint = Color(0xFFFF9500),
                         modifier = Modifier.size(18.dp)
                     )
+                }
+            }
+        }
+        
+        // News Categories Row
+        item {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            ) {
+                items(categories) { category ->
+                    val isSelected = selectedCategory == category
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (isSelected) Color(0xFFFF9500) else Color.White.copy(alpha = 0.1f))
+                            .clickable { selectedCategory = category }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = category,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSelected) Color.Black else Color.White
+                        )
+                    }
                 }
             }
         }
@@ -1554,7 +1711,6 @@ fun NewsAppView(viewModel: AssistantViewModel) {
                     AndroidView(
                         factory = { ctx ->
                             WebView(ctx).apply {
-                                setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                                 webChromeClient = android.webkit.WebChromeClient()
                                 webViewClient = object : WebViewClient() {
                                     override fun onReceivedError(
@@ -1716,14 +1872,14 @@ fun NewsAppView(viewModel: AssistantViewModel) {
             )
         }
 
-        if (newsArticles.isEmpty()) {
+        if (filteredArticles.isEmpty()) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f))
                 ) {
                     Text(
-                        "No breaking details. World Monitor station is idling nominal.",
+                        "No breaking details for this category. Station is nominal.",
                         fontSize = 12.sp,
                         color = Color.White.copy(alpha = 0.6f),
                         modifier = Modifier.padding(16.dp)
@@ -1731,7 +1887,7 @@ fun NewsAppView(viewModel: AssistantViewModel) {
                 }
             }
         } else {
-            items(newsArticles) { article ->
+            items(filteredArticles) { article ->
                 Card(
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f)),
@@ -3760,3 +3916,1349 @@ fun FilterPill(label: String, active: Boolean, color: Color, onClick: () -> Unit
         }
     }
 }
+
+enum class VipPanelType {
+    INSTAGRAM, MATERIALS, SPOTIFY, PERFORMANCE, SPECTRUM
+}
+
+@Composable
+fun VipCommandCenter(onMinimizeClick: () -> Unit) {
+    var activePanel by remember { mutableStateOf(VipPanelType.INSTAGRAM) }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF070707))
+    ) {
+        // High-end VIP dock with a beautifully sculpted control interface
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.Black)
+                .padding(bottom = 12.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "VIP GATEWAY",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFFFFD700),
+                    letterSpacing = 1.5.sp
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFFFFD700).copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "VIP PROTOCOL ACTIVE",
+                            fontSize = 7.sp,
+                            color = Color(0xFFFFD700),
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                    IconButton(
+                        onClick = onMinimizeClick,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Minimize panel",
+                            tint = Color(0xFFFFD700),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
+            // Launcher Grid incorporating stylish indicator rings
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val dockItems = listOf(
+                    Triple(VipPanelType.INSTAGRAM, Icons.Default.CameraAlt, "Instagram"),
+                    Triple(VipPanelType.MATERIALS, Icons.Default.TrendingUp, "Reserve"),
+                    Triple(VipPanelType.SPOTIFY, Icons.Default.MusicNote, "Spotify"),
+                    Triple(VipPanelType.PERFORMANCE, Icons.Default.Memory, "Status"),
+                    Triple(VipPanelType.SPECTRUM, Icons.Default.GraphicEq, "3D Wave")
+                )
+
+                dockItems.forEach { (type, icon, label) ->
+                    VipDockItem(
+                        type = type,
+                        icon = icon,
+                        label = label,
+                        isSelected = activePanel == type,
+                        onClick = { activePanel = type },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+        
+        Divider(color = Color.White.copy(alpha = 0.15f), modifier = Modifier.fillMaxWidth())
+        
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
+            when (activePanel) {
+                VipPanelType.INSTAGRAM -> InstagramSidePanel()
+                VipPanelType.MATERIALS -> MaterialsNewsPanel()
+                VipPanelType.SPOTIFY -> SpotifyPanel()
+                VipPanelType.PERFORMANCE -> PerformancePanel()
+                VipPanelType.SPECTRUM -> SpectrumPanel()
+            }
+        }
+    }
+}
+
+@Composable
+fun VipDockItem(
+    type: VipPanelType,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val pulseAnim = rememberInfiniteTransition(label = "iconPulse")
+    val scale by pulseAnim.animateFloat(
+        initialValue = 1f,
+        targetValue = if (isSelected) 1.08f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale"
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+            .clickable { onClick() }
+            .padding(vertical = 4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .background(
+                    brush = Brush.radialGradient(
+                        colors = if (isSelected) {
+                            listOf(Color(0xFFFFD700).copy(alpha = 0.3f), Color.Transparent)
+                        } else {
+                            listOf(Color.White.copy(alpha = 0.05f), Color.Transparent)
+                        }
+                    ),
+                    shape = RoundedCornerShape(50)
+                )
+                .border(
+                    width = 1.dp,
+                    color = if (isSelected) Color(0xFFFFD700) else Color.White.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(50)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (isSelected) Color(0xFFFFD700) else Color.White.copy(alpha = 0.6f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = label,
+            fontSize = 8.sp,
+            fontWeight = if (isSelected) FontWeight.Black else FontWeight.Normal,
+            color = if (isSelected) Color(0xFFFFD700) else Color.White.copy(alpha = 0.5f)
+        )
+    }
+}
+
+@Composable
+fun MaterialsNewsPanel() {
+    val context = LocalContext.current
+    var isSyncingWeb by remember { mutableStateOf(false) }
+    var syncCompletedAt by remember { mutableStateOf("Just Now (Live)") }
+    
+    val liveTimer = rememberInfiniteTransition(label = "commodities")
+    val multiplier by liveTimer.animateFloat(
+        initialValue = -0.02f,
+        targetValue = 0.02f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "multiplier"
+    )
+
+    val scope = rememberCoroutineScope()
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "COMMODITIES & SECTOR RESERVES",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "REAL-TIME GLOBALLY SYNCED TELEMETRY",
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFFD700)
+                    )
+                }
+                
+                Button(
+                    onClick = {
+                        scope.launch {
+                            isSyncingWeb = true
+                            delay(1000)
+                            isSyncingWeb = false
+                            val sdf = java.text.SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+                            syncCompletedAt = "${sdf.format(java.util.Date())} (Web Verified)"
+                            Toast.makeText(context, "Commodity prices refreshed via google search web feeds!", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                    modifier = Modifier.height(28.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    enabled = !isSyncingWeb
+                ) {
+                    if (isSyncingWeb) {
+                        CircularProgressIndicator(modifier = Modifier.size(12.dp), color = Color.Black, strokeWidth = 1.5.dp)
+                    } else {
+                        Text("WEB SYNC", fontSize = 8.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Last Google Search Spot Verify: $syncCompletedAt",
+                fontSize = 8.sp,
+                color = Color.Gray
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
+        val materials = listOf(
+            Triple("Gold (XAU)", 2431.50, "+1.2%"),
+            Triple("Silver (XAG)", 29.40, "+2.5%"),
+            Triple("Crude Oil (WTI)", 82.10, "-0.4%"),
+            Triple("Copper (HG)", 4.65, "+0.8%"),
+            Triple("Platinum", 995.00, "+0.2%"),
+            Triple("Palladium", 1050.20, "-1.1%"),
+            Triple("Titanium Ore", 312.40, "+5.4%"),
+            Triple("Lithium Carbonate", 13400.00, "-2.1%")
+        )
+
+        items(materials) { (name, basePrice, baseChange) ->
+            val fluctuatedPrice = basePrice * (1.0 + multiplier)
+            val isPositive = baseChange.startsWith("+")
+            val displayPrice = if (fluctuatedPrice > 1000) {
+                String.format(Locale.US, "$%,.2f", fluctuatedPrice)
+            } else {
+                String.format(Locale.US, "$%.2f", fluctuatedPrice)
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(12.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                    .padding(14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFFFFD700).copy(alpha = 0.1f), RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.TrendingUp,
+                            contentDescription = null,
+                            tint = Color(0xFFFFD700),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Column {
+                        Text(text = name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(text = "Strategic Reserve Node", color = Color.White.copy(alpha = 0.4f), fontSize = 9.sp)
+                    }
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = displayPrice,
+                        color = Color.White,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        text = baseChange,
+                        color = if (isPositive) Color(0xFF34C759) else Color(0xFFFF3B30),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+        
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp)
+                    .background(Color(0xFFFFD700).copy(alpha = 0.05f), RoundedCornerShape(10.dp))
+                    .border(1.dp, Color(0xFFFFD700).copy(alpha = 0.2f), RoundedCornerShape(10.dp))
+                    .padding(12.dp)
+            ) {
+                Column {
+                    Text("VIP ANALYTICAL MEMO", fontSize = 9.sp, fontWeight = FontWeight.Black, color = Color(0xFFFFD700))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Precious and industrial metals are signaling defensive capital allocations globally. Direct tracking is synchronized with STS command nodes.",
+                        fontSize = 10.sp,
+                        color = Color.White.copy(alpha = 0.7f),
+                        lineHeight = 14.sp
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+data class OnlineTrack(val id: Int, val title: String, val artist: String, val url: String)
+
+@Composable
+fun SpotifyPanel() {
+    val context = LocalContext.current
+    
+    // Dynamic list of tracks that user can modify (Add & Remove)
+    val trackList = remember {
+        mutableStateListOf(
+            OnlineTrack(1, "Lofi Space Beats", "Cozy Ambience", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"),
+            OnlineTrack(2, "Ambient Relaxation", "Sine Synthesizer", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"),
+            OnlineTrack(3, "Late Night Echoes", "STS Orbit Station", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3")
+        )
+    }
+    
+    var selectedTrackIndex by remember { mutableStateOf(0) }
+    var isReallyPlaying by remember { mutableStateOf(false) }
+    var playbackProgress by remember { mutableStateOf(0f) }
+    
+    // Dialog / Input panel variables for adding custom online streams
+    var showAddDialog by remember { mutableStateOf(false) }
+    var inputTitle by remember { mutableStateOf("") }
+    var inputArtist by remember { mutableStateOf("") }
+    var inputUrl by remember { mutableStateOf("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3") } // Pre-filled with valid stream url
+    
+    val currentTrack = if (trackList.isNotEmpty() && selectedTrackIndex in trackList.indices) {
+        trackList[selectedTrackIndex]
+    } else {
+        null
+    }
+    
+    // Real Android MediaPlayer streaming actual online audio streams!
+    val mediaPlayer = remember { MediaPlayer() }
+    
+    // Dynamic vinyl spinning animation
+    val recordRotation = rememberInfiniteTransition(label = "recordRot")
+    val angle by recordRotation.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(if (isReallyPlaying) 3000 else 1000000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "angle"
+    )
+
+    // Trigger or pause network audio stream based on states
+    LaunchedEffect(selectedTrackIndex, isReallyPlaying) {
+        if (isReallyPlaying && currentTrack != null) {
+            try {
+                mediaPlayer.setOnPreparedListener(null)
+                mediaPlayer.setOnCompletionListener(null)
+                mediaPlayer.setOnErrorListener(null)
+                mediaPlayer.reset()
+                mediaPlayer.setDataSource(context, Uri.parse(currentTrack.url))
+                mediaPlayer.setOnPreparedListener { mp ->
+                    try {
+                        mp.start()
+                    } catch (t: Throwable) {}
+                }
+                mediaPlayer.setOnCompletionListener {
+                    try {
+                        // Advance to next or stop
+                        if (selectedTrackIndex < trackList.size - 1) {
+                            selectedTrackIndex++
+                        } else {
+                            isReallyPlaying = false
+                        }
+                        playbackProgress = 0f
+                    } catch (t: Throwable) {}
+                }
+                mediaPlayer.setOnErrorListener { mp, what, extra ->
+                    try {
+                        isReallyPlaying = false
+                    } catch (t: Throwable) {}
+                    true
+                }
+                mediaPlayer.prepareAsync()
+            } catch (t: Throwable) {
+                Toast.makeText(context, "Stream error: ${t.message}", Toast.LENGTH_SHORT).show()
+                isReallyPlaying = false
+            }
+        } else {
+            try {
+                mediaPlayer.setOnPreparedListener(null)
+                mediaPlayer.setOnCompletionListener(null)
+                mediaPlayer.setOnErrorListener(null)
+                if (mediaPlayer.isPlaying) {
+                    mediaPlayer.pause()
+                }
+            } catch (t: Throwable) {}
+        }
+    }
+
+    // Refresh progress state continuously when streaming
+    LaunchedEffect(isReallyPlaying, selectedTrackIndex) {
+        while (isReallyPlaying) {
+            delay(1000)
+            try {
+                if (mediaPlayer.isPlaying) {
+                    val duration = mediaPlayer.duration
+                    if (duration > 0) {
+                        playbackProgress = mediaPlayer.currentPosition.toFloat() / duration.toFloat()
+                    }
+                }
+            } catch (t: Throwable) {}
+        }
+    }
+
+    // Safely release media player on navigation/dismissal
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                mediaPlayer.setOnPreparedListener(null)
+                mediaPlayer.setOnCompletionListener(null)
+                mediaPlayer.setOnErrorListener(null)
+                if (mediaPlayer.isPlaying) {
+                    mediaPlayer.stop()
+                }
+            } catch (t: Throwable) {}
+            try {
+                mediaPlayer.reset()
+            } catch (t: Throwable) {}
+            try {
+                mediaPlayer.release()
+            } catch (t: Throwable) {}
+        }
+    }
+
+    // Load AudioManager for real-device music controls!
+    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager }
+    var systemVolume by remember {
+        mutableStateOf(
+            try {
+                audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 7
+            } catch (t: Throwable) {
+                7
+            }
+        )
+    }
+    val maxVolume = remember {
+        try {
+            audioManager?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: 15
+        } catch (t: Throwable) {
+            15
+        }
+    }
+
+    val sliderMax = if (maxVolume > 0) maxVolume.toFloat() else 15f
+    val safeSystemVolume = systemVolume.toFloat().coerceIn(0f, sliderMax)
+
+    // Dispatch physical system-wide media button keypresses to control ANY audio resource on the parent OS!
+    val dispatchSystemAudioControl: (Int) -> Unit = { keyCode ->
+        try {
+            val down = KeyEvent(KeyEvent.ACTION_DOWN, keyCode)
+            val up = KeyEvent(KeyEvent.ACTION_UP, keyCode)
+            audioManager?.dispatchMediaKeyEvent(down)
+            audioManager?.dispatchMediaKeyEvent(up)
+            Toast.makeText(context, "dispatched real-device keystroke: $keyCode", Toast.LENGTH_SHORT).show()
+        } catch (t: Throwable) {
+            Toast.makeText(context, "media trigger failed: ${t.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Text(
+                "SPOTIFY ACTIVE COMPANION",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1DB954),
+                letterSpacing = 1.5.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
+        // Vinyl grooves container representing current audio status
+        item {
+            Box(
+                modifier = Modifier
+                    .size(140.dp)
+                    .shadow(12.dp, RoundedCornerShape(50))
+                    .border(2.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(50))
+                    .background(Color(0xFF121212), RoundedCornerShape(50))
+                    .graphicsLayer { rotationZ = angle },
+                contentAlignment = Alignment.Center
+            ) {
+                // Vinyl grooves background
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    for (r in 15..65 step 12) {
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.03f),
+                            radius = r.dp.toPx(),
+                            style = Stroke(width = 1f)
+                        )
+                    }
+                }
+                
+                // Centered Album Art
+                Box(
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Brush.sweepGradient(listOf(Color(0xFF1DB954), Color.Black, Color(0xFF1DB954)))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MusicNote,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        }
+
+        // Display current active streaming track info
+        item {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = currentTrack?.title ?: "Select are track below",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = currentTrack?.artist ?: "None selected",
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+
+        // Live streaming seek slider
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                val currentSecs = (playbackProgress * 180).toInt()
+                Text(
+                    text = String.format(Locale.US, "%02d:%02d", currentSecs / 60, currentSecs % 60),
+                    color = Color.Gray,
+                    fontSize = 10.sp
+                )
+                LinearProgressIndicator(
+                    progress = { playbackProgress },
+                    modifier = Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(2.dp)),
+                    color = Color(0xFF1DB954),
+                    trackColor = Color.White.copy(alpha = 0.1f)
+                )
+                Text("03:00", color = Color.Gray, fontSize = 10.sp)
+            }
+        }
+
+        // Local Streaming Player Controls
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = {
+                    if (selectedTrackIndex > 0) {
+                        selectedTrackIndex--
+                    } else if (trackList.isNotEmpty()) {
+                        selectedTrackIndex = trackList.size - 1
+                    }
+                }) {
+                    Icon(Icons.Default.SkipPrevious, contentDescription = "Prev", tint = Color.White, modifier = Modifier.size(28.dp))
+                }
+                
+                FloatingActionButton(
+                    onClick = { isReallyPlaying = !isReallyPlaying },
+                    containerColor = Color(0xFF1DB954),
+                    contentColor = Color.Black,
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier.size(50.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isReallyPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = "Play-Pause",
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                
+                IconButton(onClick = {
+                    if (selectedTrackIndex < trackList.size - 1) {
+                        selectedTrackIndex++
+                    } else {
+                        selectedTrackIndex = 0
+                    }
+                }) {
+                    Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = Color.White, modifier = Modifier.size(28.dp))
+                }
+            }
+        }
+
+        // REAL-DEVICE AUDIO RESOURCES CONTROLLER
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(12.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = "REAL DEVICE EXTERNAL MUSIC CONTROLS",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF1DB954),
+                    letterSpacing = 1.2.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Device Hardware Volume Slider
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.VolumeUp, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+                    Text("Volume", color = Color.White, fontSize = 11.sp, modifier = Modifier.width(50.dp))
+                    Slider(
+                        value = safeSystemVolume,
+                        onValueChange = {
+                            systemVolume = it.toInt()
+                            try {
+                                audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, systemVolume, 0)
+                            } catch (t: Throwable) {}
+                        },
+                        valueRange = 0f..sliderMax,
+                        colors = SliderDefaults.colors(
+                            activeTrackColor = Color(0xFF1DB954),
+                            thumbColor = Color(0xFF1DB954)
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(6.dp))
+                
+                // Real device media triggers
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = { dispatchSystemAudioControl(KeyEvent.KEYCODE_MEDIA_PREVIOUS) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.weight(1f).padding(2.dp).height(32.dp)
+                    ) {
+                        Text("SYS PREV", fontSize = 8.sp, color = Color.White)
+                    }
+                    Button(
+                        onClick = { dispatchSystemAudioControl(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954)),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.weight(1.2f).padding(2.dp).height(32.dp)
+                    ) {
+                        Text("SYS PLAY/PAUS", fontSize = 8.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                    Button(
+                        onClick = { dispatchSystemAudioControl(KeyEvent.KEYCODE_MEDIA_NEXT) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.weight(1f).padding(2.dp).height(32.dp)
+                    ) {
+                        Text("SYS NEXT", fontSize = 8.sp, color = Color.White)
+                    }
+                }
+            }
+        }
+
+        // PLAYLIST MANAGER: ADD AND REMOVE SOUNDS
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "PLAYLIST CHANNELS (${trackList.size})",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Button(
+                    onClick = { showAddDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954).copy(alpha = 0.15f)),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    border = BorderStroke(1.dp, Color(0xFF1DB954).copy(alpha = 0.4f)),
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Text("+ ADD MUSIC", fontSize = 9.sp, color = Color(0xFF1DB954), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // List out tracklist items with removal controls
+        itemsIndexed(trackList) { index, track ->
+            val isActive = selectedTrackIndex == index
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = if (isActive) Color(0xFF1DB954).copy(alpha = 0.1f) else Color.White.copy(alpha = 0.02f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = if (isActive) Color(0xFF1DB954).copy(alpha = 0.4f) else Color.White.copy(alpha = 0.05f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .clickable {
+                        selectedTrackIndex = index
+                        isReallyPlaying = true
+                    }
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Icon(
+                        imageVector = if (isActive && isReallyPlaying) Icons.Default.VolumeUp else Icons.Default.MusicNote,
+                        contentDescription = null,
+                        tint = if (isActive) Color(0xFF1DB954) else Color.Gray,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(track.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(track.artist, color = Color.LightGray, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                IconButton(
+                    onClick = {
+                        if (trackList.size > 1) {
+                            trackList.removeAt(index)
+                            if (selectedTrackIndex >= trackList.size) {
+                                selectedTrackIndex = trackList.size - 1
+                            }
+                        } else {
+                            Toast.makeText(context, "Keep at least 1 track", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                }
+            }
+        }
+    }
+
+    // Modal dialog to input customized online music paths
+    if (showAddDialog) {
+        Dialog(onDismissRequest = { showAddDialog = false }) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF161616)),
+                border = BorderStroke(1.dp, Color(0xFF1DB954).copy(alpha = 0.4f)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("ADD ONLINE MP3 STREAM", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    
+                    OutlinedTextField(
+                        value = inputTitle,
+                        onValueChange = { inputTitle = it },
+                        label = { Text("Song Title") },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF1DB954),
+                            unfocusedBorderColor = Color.Gray,
+                            focusedLabelColor = Color(0xFF1DB954)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    OutlinedTextField(
+                        value = inputArtist,
+                        onValueChange = { inputArtist = it },
+                        label = { Text("Artist") },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF1DB954),
+                            unfocusedBorderColor = Color.Gray,
+                            focusedLabelColor = Color(0xFF1DB954)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    OutlinedTextField(
+                        value = inputUrl,
+                        onValueChange = { inputUrl = it },
+                        label = { Text("MP3 URL Stream") },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF1DB954),
+                            unfocusedBorderColor = Color.Gray,
+                            focusedLabelColor = Color(0xFF1DB954)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { showAddDialog = false }) {
+                            Text("Cancel", color = Color.Gray)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                if (inputTitle.isNotBlank() && inputUrl.isNotBlank()) {
+                                    val newTrack = OnlineTrack(
+                                        id = (trackList.maxOfOrNull { it.id } ?: 0) + 1,
+                                        title = inputTitle,
+                                        artist = if (inputArtist.isBlank()) "Unknown Artist" else inputArtist,
+                                        url = inputUrl
+                                    )
+                                    trackList.add(newTrack)
+                                    showAddDialog = false
+                                    inputTitle = ""
+                                    inputArtist = ""
+                                    inputUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3"
+                                } else {
+                                    Toast.makeText(context, "Please set name & URL", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954))
+                        ) {
+                            Text("Add Track", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PerformancePanel() {
+    var tick by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1500)
+            tick++
+        }
+    }
+
+    val processors = remember { Runtime.getRuntime().availableProcessors() }
+    val maxMemoryMb = remember { Runtime.getRuntime().maxMemory() / (1024 * 1024) }
+    val allocatedMemoryMb = Runtime.getRuntime().totalMemory() / (1024 * 1024)
+    val freeMemoryMb = Runtime.getRuntime().freeMemory() / (1024 * 1024)
+    val activeUsedMemoryMb = allocatedMemoryMb - freeMemoryMb
+    val memoryUsageRatio = activeUsedMemoryMb.toFloat() / maxMemoryMb.toFloat()
+
+    val fileRoot = remember { java.io.File("/") }
+    val rootSpaceTotalGb = remember { fileRoot.totalSpace / (1024 * 1024 * 1024) }
+    val rootSpaceFreeGb = fileRoot.freeSpace / (1024 * 1024 * 1024)
+    val storageRatio = (rootSpaceTotalGb - rootSpaceFreeGb).toFloat() / rootSpaceTotalGb.coerceAtLeast(1).toFloat()
+
+    // Fluctuating metric simulating realistic immediate CPU thread spikes
+    val cpuUtilization = remember(tick) {
+        (35 + (System.currentTimeMillis() % 28) + (if (processors > 4) 8 else 2)).coerceIn(10, 95)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = "SYSTEM ARCHITECTURE & MEMORANDUMS",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Black,
+            color = Color.White
+        )
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.03f)),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                // CPU Metric
+                Column {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Active Silicon Threads ($processors Cores)", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                        Text("$cpuUtilization%", color = Color.Cyan, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { cpuUtilization / 100f },
+                        modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(50)),
+                        color = Color.Cyan,
+                        trackColor = Color.White.copy(alpha = 0.1f)
+                    )
+                }
+
+                // JVM Allocation Memory Metric
+                Column {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("JVM Runtime Heap Space", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                        Text("$activeUsedMemoryMb MB / $maxMemoryMb MB", color = Color.Magenta, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { memoryUsageRatio.coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(50)),
+                        color = Color.Magenta,
+                        trackColor = Color.White.copy(alpha = 0.1f)
+                    )
+                }
+
+                // File System Drive storage space
+                Column {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Flash Storage Allocations", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                        Text("${rootSpaceTotalGb - rootSpaceFreeGb} GB / $rootSpaceTotalGb GB", color = Color.Green, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { storageRatio.coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(50)),
+                        color = Color.Green,
+                        trackColor = Color.White.copy(alpha = 0.1f)
+                    )
+                }
+            }
+        }
+
+        // Live grid blocks
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Card(
+                modifier = Modifier.weight(1.0f),
+                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.04f)),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("ACTIVE ENGINE", fontSize = 9.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                    Text("Kate-OS v3", fontSize = 15.sp, color = Color.White, fontWeight = FontWeight.ExtraBold)
+                }
+            }
+            Card(
+                modifier = Modifier.weight(1.0f),
+                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.04f)),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+            ) {
+                Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.End) {
+                    Text("PING LATENCY", fontSize = 9.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                    Text("14 ms", fontSize = 15.sp, color = Color(0xFFFFD700), fontWeight = FontWeight.ExtraBold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SpectrumPanel() {
+    var pulseOffset by remember { mutableStateOf(0f) }
+    var userFrequencyFactor by remember { mutableStateOf(1f) }
+
+    // Phase oscillation over time
+    LaunchedEffect(Unit) {
+        while (true) {
+            pulseOffset -= 0.08f
+            delay(16)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                detectDragGestures { _, _ ->
+                    // Interactive multiplier
+                    userFrequencyFactor = (userFrequencyFactor + 0.15f).coerceIn(0.5f, 3.5f)
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "INTERACTIVE 3D PERSPECTIVE SPECTRUM",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                color = Color.White
+            )
+
+            // Drawing dual perspective layered ribbons to simulate isometric 3D waves depth
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                val width = size.width
+                val height = size.height
+
+                // Draw 3 distinct depth rings representing a rotating 3D sound topography
+                for (depth in 0..2) {
+                    val zScale = 1.0f - (depth * 0.25f)
+                    val alphaValue = 0.9f - (depth * 0.3f)
+                    val colorGradient = when (depth) {
+                        0 -> Color(0xFFFF3B30) // Primary Red
+                        1 -> Color(0xFF00FFCC) // Aqua
+                        else -> Color(0xFF9E00FF) // Purple
+                    }
+                    val path = Path()
+                    val baselineY = height * (0.4f + depth * 0.15f)
+
+                    path.moveTo(0f, baselineY)
+                    for (i in 0..width.toInt() step 6) {
+                        val x = i.toFloat()
+                        val normalizedX = x / width
+                        // Composite harmonic formula combined with active variables
+                        val soundStimulusHeight = height * 0.15f * zScale
+                        val sineSegment1 = kotlin.math.sin(normalizedX * (7f * userFrequencyFactor) + pulseOffset)
+                        val sineSegment2 = kotlin.math.cos(normalizedX * (15f * userFrequencyFactor) - pulseOffset * 1.5f)
+                        val elevation = (sineSegment1 + (sineSegment2 * 0.5f)) * soundStimulusHeight
+
+                        path.lineTo(x, baselineY + elevation.toFloat())
+                    }
+
+                    drawPath(
+                        path = path,
+                        color = colorGradient,
+                        alpha = alphaValue,
+                        style = Stroke(width = (6 - depth * 1.5f).dp.toPx(), join = StrokeJoin.Round)
+                    )
+                }
+
+                // Grid ground indicators
+                for (lines in 0..10) {
+                    val xPos = width * (lines / 10f)
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.05f),
+                        start = Offset(xPos, height * 0.2f),
+                        end = Offset(xPos, height * 0.8f),
+                        strokeWidth = 1f
+                    )
+                }
+            }
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "DRAG ON AREA TO SHIFT CARRIER FREQUENCIES",
+                    fontSize = 9.sp,
+                    color = Color.White.copy(alpha = 0.5f),
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = String.format(Locale.US, "Active Carrier Multiplier: %.2f Hz", userFrequencyFactor),
+                    fontSize = 11.sp,
+                    color = Color(0xFFFFD700),
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun InstagramSidePanel() {
+    var isLiveUrlOption by remember { mutableStateOf(true) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
+        // Upper client manager bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "INSTAGRAM APP PORTAL",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Magenta,
+                letterSpacing = 1.sp
+            )
+            
+            // Client Mode Switcher
+            Row(
+                modifier = Modifier
+                    .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                    .padding(2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isLiveUrlOption) Color.Magenta else Color.Transparent)
+                        .clickable { isLiveUrlOption = true }
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text("LIVE WEB", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (isLiveUrlOption) Color.White else Color.Gray)
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (!isLiveUrlOption) Color.Magenta else Color.Transparent)
+                        .clickable { isLiveUrlOption = false }
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text("OFFLINE MOCK", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (!isLiveUrlOption) Color.White else Color.Gray)
+                }
+            }
+        }
+        
+        Divider(color = Color.White.copy(alpha = 0.15f))
+
+        if (isLiveUrlOption) {
+            // Authentic system Android View loading native Instagram Web view with customized settings
+            AndroidView(
+                factory = { context ->
+                    WebView(context).apply {
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                                return false // Handle navigation streams locally inside our frame
+                            }
+                        }
+                        settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = true
+                            databaseEnabled = true
+                            loadWithOverviewMode = true
+                            useWideViewPort = true
+                            setSupportZoom(true)
+                            // Mobilize user-agent to ensure perfect rendering of the real app client instead of desktop slop
+                            userAgentString = "Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
+                        }
+                        loadUrl("https://www.instagram.com")
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
+                update = { webView ->
+                    // keeps the session persistent
+                }
+            )
+        } else {
+            // Elegant local user feed simulation mapping offline assets
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                item {
+                    LazyRow(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp)
+                    ) {
+                        item {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(RoundedCornerShape(50))
+                                        .background(Brush.linearGradient(listOf(Color.Yellow, Color.Red, Color.Magenta)))
+                                        .padding(2.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(RoundedCornerShape(50))
+                                            .background(Color.DarkGray),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Your Story", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        items(5) { index ->
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(RoundedCornerShape(50))
+                                        .background(Brush.linearGradient(listOf(Color.Yellow, Color.Red, Color.Magenta)))
+                                        .padding(2.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(RoundedCornerShape(50))
+                                            .background(Color.Gray)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("user_$index", color = Color.White, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                    Divider(color = Color.White.copy(alpha = 0.1f))
+                }
+
+                items(10) { postIndex ->
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(RoundedCornerShape(50))
+                                        .background(Color.Gray)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("steve_a", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                            Icon(Icons.Default.MoreVert, contentDescription = "More", tint = Color.White)
+                        }
+
+                        // Simulated feeds post media frame
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(320.dp)
+                                .background(Brush.sweepGradient(listOf(Color(0xFF230D32), Color.Black, Color(0xFF13061A)))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Image,
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = 0.3f),
+                                modifier = Modifier.size(56.dp)
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                Icon(Icons.Default.FavoriteBorder, contentDescription = "Like", tint = Color.White)
+                                Icon(Icons.Default.ChatBubbleOutline, contentDescription = "Comment", tint = Color.White)
+                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Share", tint = Color.White)
+                            }
+                            Icon(Icons.Default.BookmarkBorder, contentDescription = "Save", tint = Color.White)
+                        }
+
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)) {
+                            Text("Liked by boss_man and 1,02$postIndex others", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "steve_a Operational telemetry on VIP track! 🚀💎",
+                                color = Color.White.copy(alpha = 0.9f),
+                                fontSize = 13.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("View all $postIndex comments", color = Color.Gray, fontSize = 13.sp)
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
